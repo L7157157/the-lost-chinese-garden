@@ -68,7 +68,9 @@
     >
       <!-- 你的 3D 模型 -->
       <a-gltf-model
+        id="model"
         src="model.glb"
+        visible="false"
         position="0 0 0"
         rotation="0 270 0"
         scale="2 2 2"
@@ -78,18 +80,32 @@
 
   <!-- 识别状态提示逻辑 -->
   <script>
-    document.addEventListener("DOMContentLoaded", () => {
-      const hint = document.getElementById("hint");
-      const target = document.getElementById("target");
+document.addEventListener("DOMContentLoaded", () => {
+  const hint = document.getElementById("hint");
+  const target = document.getElementById("target");
+  const model = document.getElementById("model");
 
-      target.addEventListener("targetFound", () => {
-        hint.textContent = "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
-      });
+  // 初始提示
+  hint.textContent = "Scan the poster to view the model of The Lost Chinese Garden.";
 
-      target.addEventListener("targetLost", () => {
-        hint.textContent = "Keep the poster in view to continue exploring";
-      });
-    });
-  </script>
+  target.addEventListener("targetFound", () => {
+    hint.textContent = "Loading the model of The Lost Chinese Garden…";
+
+    model.addEventListener(
+      "model-loaded",
+      () => {
+        model.setAttribute("visible", "true");
+        hint.textContent =
+          "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+      },
+      { once: true }
+    );
+  });
+
+  target.addEventListener("targetLost", () => {
+    hint.textContent = "Keep the poster in view to continue exploring.";
+  });
+});
+</script>
 </body>
 </html>
