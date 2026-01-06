@@ -79,62 +79,81 @@
   </a-scene>
 
   <!-- 识别状态提示逻辑 -->
-  <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const hint = document.getElementById("hint");
-  const target = document.getElementById("target");
-  const model = document.getElementById("model");
+
 <script>
-document.addEventListener("DOMContentLoaded", () => {
+(() => {
   const hint = document.getElementById("hint");
-  const target = document.getElementById("target");
-  const model = document.getElementById("model");
 
-  let modelReady = false;
-
-  // 初始提示
-  hint.textContent = "Scan the artwork to view the model of The Lost Chinese Garden.";
-
-  // 重要：一开始就监听模型加载完成（不要放在 targetFound 里）
-  model.addEventListener("model-loaded", () => {
-    modelReady = true;
+  // 把任何 JS 报错直接显示到屏幕上（Proposal 演示很救命）
+  window.addEventListener("error", (e) => {
+    hint.textContent = "Error: " + (e.message || "unknown");
   });
 
-  target.addEventListener("targetFound", () => {
-    // 识别到先显示 loading
-    hint.textContent = "Loading the model of The Lost Chinese Garden…";
+  const scene = document.querySelector("a-scene");
 
-    // 如果模型已经加载过（比如缓存/预加载），直接显示
-    if (modelReady || model.hasLoaded) {
-      model.setAttribute("visible", "true");
-      hint.textContent =
-        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+  // MindAR 场景状态（可选但很有用）
+  scene.addEventListener("arReady", () => {
+    hint.textContent = "Scan the artwork to view the model of The Lost Chinese Garden.";
+  });
+  scene.addEventListener("arError", () => {
+    hint.textContent = "AR failed to start. Please refresh and try again.";
+  });
+
+  scene.addEventListener("loaded", () => {
+    const target = document.getElementById("target");
+    const model = document.getElementById("model");
+
+    if (!target) {
+      hint.textContent = 'Setup error: missing id="target" on the image target entity.';
+      return;
+    }
+    if (!model) {
+      hint.textContent = 'Setup error: missing id="model" on the glTF model.';
       return;
     }
 
-    // 否则等它加载好再显示（加一个安全兜底）
-    const onReady = () => {
+    let modelReady = false;
+    hint.textContent = "Scan the artwork to view the model of The Lost Chinese Garden.";
+
+    model.addEventListener("model-loaded", () => {
       modelReady = true;
-      model.setAttribute("visible", "true");
-      hint.textContent =
-        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
-      model.removeEventListener("model-loaded", onReady);
-    };
+    });
 
-    model.addEventListener("model-loaded", onReady);
+    target.addEventListener("targetFound", () => {
+      hint.textContent = "Loading the model of The Lost Chinese Garden…";
 
-    // 兜底：避免极端情况下永远卡 loading（比如网络断了）
-    setTimeout(() => {
-      if (!modelReady && !model.hasLoaded) {
-        hint.textContent = "Loading… If it takes too long, please refresh and try again.";
+      // 已加载过就直接显示
+      if (modelReady || model.hasLoaded) {
+        model.setAttribute("visible", "true");
+        hint.textContent =
+          "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+        return;
       }
-    }, 8000);
-  });
 
-  target.addEventListener("targetLost", () => {
-    hint.textContent = "Keep the artwork in view to continue exploring.";
+      // 等加载好再显示（兜底一次）
+      const onReady = () => {
+        modelReady = true;
+        model.setAttribute("visible", "true");
+        hint.textContent =
+          "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+        model.removeEventListener("model-loaded", onReady);
+      };
+      model.addEventListener("model-loaded", onReady);
+
+      // 超时提示（避免一直卡 loading）
+      setTimeout(() => {
+        if (!modelReady && !model.hasLoaded) {
+          hint.textContent = "Loading… If it takes too long, please refresh and try again.";
+        }
+      }, 8000);
+    });
+
+    target.addEventListener("targetLost", () => {
+      hint.textContent = "Keep the artwork in view to continue exploring.";
+    });
   });
-});
+})();
 </script>
+  
 </body>
 </html>
