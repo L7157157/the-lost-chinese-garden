@@ -84,26 +84,55 @@ document.addEventListener("DOMContentLoaded", () => {
   const hint = document.getElementById("hint");
   const target = document.getElementById("target");
   const model = document.getElementById("model");
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const hint = document.getElementById("hint");
+  const target = document.getElementById("target");
+  const model = document.getElementById("model");
+
+  let modelReady = false;
 
   // 初始提示
-  hint.textContent = "Scan the poster to view the model of The Lost Chinese Garden.";
+  hint.textContent = "Scan the artwork to view the model of The Lost Chinese Garden.";
+
+  // 重要：一开始就监听模型加载完成（不要放在 targetFound 里）
+  model.addEventListener("model-loaded", () => {
+    modelReady = true;
+  });
 
   target.addEventListener("targetFound", () => {
+    // 识别到先显示 loading
     hint.textContent = "Loading the model of The Lost Chinese Garden…";
 
-    model.addEventListener(
-      "model-loaded",
-      () => {
-        model.setAttribute("visible", "true");
-        hint.textContent =
-          "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
-      },
-      { once: true }
-    );
+    // 如果模型已经加载过（比如缓存/预加载），直接显示
+    if (modelReady || model.hasLoaded) {
+      model.setAttribute("visible", "true");
+      hint.textContent =
+        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+      return;
+    }
+
+    // 否则等它加载好再显示（加一个安全兜底）
+    const onReady = () => {
+      modelReady = true;
+      model.setAttribute("visible", "true");
+      hint.textContent =
+        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+      model.removeEventListener("model-loaded", onReady);
+    };
+
+    model.addEventListener("model-loaded", onReady);
+
+    // 兜底：避免极端情况下永远卡 loading（比如网络断了）
+    setTimeout(() => {
+      if (!modelReady && !model.hasLoaded) {
+        hint.textContent = "Loading… If it takes too long, please refresh and try again.";
+      }
+    }, 8000);
   });
 
   target.addEventListener("targetLost", () => {
-    hint.textContent = "Keep the poster in view to continue exploring.";
+    hint.textContent = "Keep the artwork in view to continue exploring.";
   });
 });
 </script>
