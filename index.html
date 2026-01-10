@@ -19,7 +19,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: black;
+      background: transparent;
       font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     }
 
@@ -53,12 +53,13 @@
 
   <!-- AR 场景 -->
   <a-scene
-    mindar-image="imageTargetSrc: poster.mind; filterMinCF: 0.0001; filterBeta: 0.001;"
-    embedded
-    vr-mode-ui="enabled:false"
-    device-orientation-permission-ui="enabled:false"
-    renderer="colorManagement: true; physicallyCorrectLights: true;"
-  >
+  mindar-image="imageTargetSrc: poster.mind; filterMinCF: 0.0001; filterBeta: 0.001;"
+  embedded
+  vr-mode-ui="enabled:false"
+  device-orientation-permission-ui="enabled:false"
+  renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true;"
+  background="transparent: true"
+>
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
     <!-- 海报识别目标 -->
