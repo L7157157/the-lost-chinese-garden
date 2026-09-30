@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
+  <title>The Lost Chinese Garden · AR</title>
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
@@ -43,18 +44,35 @@
       color: white;
       font-size: 14px;
       text-align: center;
-      pointer-events: none;
+      box-sizing: border-box;
+      padding-top: max(12px, env(safe-area-inset-top));
     }
+    #hint p { margin: 6px 0; }
+    #detail { font-size: 12px; opacity: 0.85; }
+    progress { width: min(100%, 360px); height: 8px; }
+    button {
+      margin-top: 10px; padding: 12px 20px; min-height: 44px;
+      border: 0; border-radius: 8px; background: white; color: #111;
+      font: inherit; cursor: pointer;
+    }
+    [hidden] { display: none !important; }
   </style>
 </head>
 
 <body>
   <!-- 提示 UI -->
-  <div id="hint">Scan the poster to view the model of The Lost Chinese Garden.</div>
+  <div id="hint">
+    <p id="status" role="status" aria-live="polite">Preparing The Lost Chinese Garden…</p>
+    <p id="detail">Please keep this page open.</p>
+    <progress id="progress" aria-label="Resource download progress" max="100"></progress>
+    <br />
+    <button id="start" type="button" hidden>Start AR</button>
+    <button id="retry" type="button" hidden>Try again</button>
+  </div>
 
   <!-- AR 场景 -->
   <a-scene
-    mindar-image="imageTargetSrc: poster.mind; filterMinCF: 0.0001; filterBeta: 0.001;"
+    mindar-image="autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1; missTolerance: 8; warmupTolerance: 5; filterMinCF: 0.0001; filterBeta: 0.001;"
     embedded
     vr-mode-ui="enabled:false"
     device-orientation-permission-ui="enabled:false"
@@ -83,7 +101,6 @@
       <!-- 你的 3D 模型 -->
       <a-gltf-model
         id="model"
-        src="model.glb"
         visible="false"
         position="0 0 0"
         rotation="0 270 0"
@@ -92,62 +109,244 @@
     </a-entity>
   </a-scene>
 
-  <!-- 识别状态提示逻辑 -->
   <script>
-document.addEventListener("DOMContentLoaded", () => {
-  const hint = document.getElementById("hint");
-  const target = document.getElementById("target");
-  const model = document.getElementById("model");
+  (() => {
+    // Bump ASSET_VERSION whenever model.glb or poster.mind changes.
+    // Deploy a self-contained GLB (embedded textures) beside this HTML over HTTPS.
+    const ASSET_VERSION = "festival-1";
+    const CACHE_NAME = "lost-garden-assets";
+    const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
+    const scene = document.querySelector("a-scene");
+    const model = document.getElementById("model");
+    const target = document.getElementById("target");
+    const status = document.getElementById("status");
+    const detail = document.getElementById("detail");
+    const progress = document.getElementById("progress");
+    const start = document.getElementById("start");
+    const retry = document.getElementById("retry");
+    let cache;
+    let modelReady = false;
+    let arReady = false;
+    let starting = false;
+    let targetVisible = false;
+    let seenTarget = false;
+    let failed = false;
+    let arTimer;
+    const objectURLs = [];
 
-  let targetVisible = false;
-  let modelReady = false;
-  let modelFailed = false;
-  let hasSeenTarget = false;
-
-  function updateView() {
-    model.setAttribute("visible", targetVisible && modelReady);
-    if (modelFailed) {
-      hint.textContent = "The model could not load. Check your connection and reload the page.";
-    } else if (!targetVisible) {
-      hint.textContent = hasSeenTarget
-        ? "Keep the poster in view to continue exploring."
-        : "Scan the poster to view the model of The Lost Chinese Garden.";
-    } else if (!modelReady) {
-      hint.textContent = "Loading the model of The Lost Chinese Garden…";
-    } else {
-      hint.textContent =
-        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+    function message(text, subtext = "") {
+      status.textContent = text;
+      detail.textContent = subtext;
     }
-  }
 
-  // Listen independently of poster detection: either event can happen first.
-  model.addEventListener("model-loaded", () => {
-    modelReady = true;
-    modelFailed = false;
-    updateView();
-  });
+    function updateView() {
+      model.setAttribute("visible", !failed && arReady && modelReady && targetVisible && !document.hidden);
+      if (failed || !arReady) return;
+      if (document.hidden) return;
+      message(targetVisible
+        ? "The Lost Chinese Garden is revealed."
+        : seenTarget ? "Keep the poster in view to continue exploring."
+        : "Point your camera at the poster.",
+        targetVisible ? "Move slowly to explore the garden." : "Keep the whole poster in view and hold your phone steady.");
+    }
 
-  model.addEventListener("model-error", () => {
-    modelReady = false;
-    modelFailed = true;
-    updateView();
-  });
+    function fail(text) {
+      failed = true;
+      clearTimeout(arTimer);
+      progress.hidden = true;
+      start.hidden = true;
+      retry.hidden = false;
+      message(text, "Check your connection and camera permission, then try again.");
+      updateView();
+      // Also release the camera if startup stalled before arReady.
+      const system = scene.systems?.["mindar-image-system"];
+      system?.video?.srcObject?.getTracks().forEach(track => track.stop());
+      if (arReady) system.pause();
+    }
 
-  target.addEventListener("targetFound", () => {
-    targetVisible = true;
-    hasSeenTarget = true;
-    updateView();
-  });
+    async function download(name, label) {
+      const url = assetURL(name);
+      message(`Preparing ${label}…`);
+      progress.removeAttribute("value");
+      try {
+        const hit = await cache?.match(url);
+        if (hit) {
+          message(`Loading saved ${label}…`);
+          return await hit.blob();
+        }
+      } catch (error) { console.warn("Cache read unavailable", error); }
 
-  target.addEventListener("targetLost", () => {
-    targetVisible = false;
-    updateView();
-  });
+      const controller = new AbortController();
+      let timer;
+      const resetTimeout = () => {
+        clearTimeout(timer);
+        timer = setTimeout(() => controller.abort(), 45000);
+      };
+      resetTimeout();
+      try {
+        const response = await fetch(url, {signal: controller.signal});
+        if (!response.ok) throw new Error(`${name}: HTTP ${response.status}`);
+        const length = Number(response.headers.get("content-length"));
+        const encoded = response.headers.get("content-encoding");
+        const total = !encoded || encoded === "identity" ? length : 0;
+        let blob;
+        if (response.body) {
+          const reader = response.body.getReader();
+          const chunks = [];
+          let received = 0;
+          while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            resetTimeout();
+            chunks.push(value);
+            received += value.byteLength;
+            const mb = (received / 1048576).toFixed(1);
+            if (total > 0 && received <= total) {
+              const percent = Math.floor(received / total * 100);
+              progress.value = percent;
+              message(`Downloading ${label} · ${percent}%`, `${mb} MB received`);
+            } else {
+              progress.removeAttribute("value");
+              message(`Downloading ${label}…`, `${mb} MB received`);
+            }
+          }
+          blob = new Blob(chunks, {type: response.headers.get("content-type") || "application/octet-stream"});
+        } else {
+          blob = await response.blob();
+        }
+        if (!blob.size) throw new Error(`${name} is empty`);
+        return blob;
+      } finally { clearTimeout(timer); }
+    }
 
-  // A cached model may already have finished before DOMContentLoaded.
-  modelReady = Boolean(model.getObject3D("mesh"));
-  updateView();
-});
-</script>
+    async function save(name, blob) {
+      try { await cache?.put(assetURL(name), new Response(blob)); }
+      catch (error) { console.warn("Cache write unavailable; continuing without persistent cache", error); }
+    }
+
+    function blobURL(blob) {
+      const url = URL.createObjectURL(blob);
+      objectURLs.push(url);
+      return url;
+    }
+
+    function loadModel(blob) {
+      return new Promise((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          model.removeEventListener("model-loaded", loaded);
+          model.removeEventListener("model-error", error);
+        };
+        const loaded = () => { cleanup(); modelReady = true; resolve(); };
+        const error = () => { cleanup(); reject(new Error("Model parsing failed")); };
+        const timer = setTimeout(() => {
+          cleanup(); reject(new Error("Model parsing timed out"));
+        }, 90000);
+        model.addEventListener("model-loaded", loaded);
+        model.addEventListener("model-error", error);
+        model.setAttribute("src", blobURL(blob));
+      });
+    }
+
+    target.addEventListener("targetFound", () => {
+      targetVisible = true;
+      seenTarget = true;
+      updateView();
+    });
+    target.addEventListener("targetLost", () => {
+      targetVisible = false;
+      updateView();
+    });
+    scene.addEventListener("arError", () => fail("Unable to start the camera. Please allow camera access."));
+    let posterBlob;
+    scene.addEventListener("arReady", () => {
+      if (failed) {
+        scene.systems["mindar-image-system"].pause();
+        return;
+      }
+      clearTimeout(arTimer);
+      arReady = true;
+      starting = false;
+      progress.hidden = true;
+      void save("poster.mind", posterBlob);
+      updateView();
+      if (document.hidden) scene.systems["mindar-image-system"].pause(true);
+    });
+    start.addEventListener("click", () => {
+      if (starting || arReady || failed || !modelReady) return;
+      starting = true;
+      start.hidden = true;
+      progress.hidden = false;
+      progress.removeAttribute("value");
+      message("Starting camera…", "Allow camera access when prompted.");
+      arTimer = setTimeout(() => fail("Camera setup is taking too long."), 60000);
+      try { scene.systems["mindar-image-system"].start(); }
+      catch (error) { console.error(error); fail("Unable to start AR on this device."); }
+    });
+    retry.addEventListener("click", async () => {
+      retry.disabled = true;
+      // Drop only this artwork's current resources, including a possibly corrupt download.
+      try {
+        await Promise.all(["model.glb", "poster.mind"].map(name => cache?.delete(assetURL(name))));
+      } catch (error) { console.warn(error); }
+      location.reload();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (!arReady || failed) return;
+      const system = scene.systems["mindar-image-system"];
+      // Keep the video alive but pause image processing in the background.
+      if (document.hidden) system.pause(true);
+      else {
+        targetVisible = false;
+        // Force a fresh targetFound event after returning to the page.
+        target.object3D.visible = false;
+        system.unpause();
+      }
+      updateView();
+    });
+    window.addEventListener("pagehide", event => {
+      if (!event.persisted) objectURLs.forEach(url => URL.revokeObjectURL(url));
+    });
+
+    async function prepare() {
+      if (!window.AFRAME || !AFRAME.components["mindar-image"]) {
+        fail("AR could not load. Please check your connection.");
+        return;
+      }
+      if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+        fail("Open this experience in Safari or Chrome using its HTTPS link.");
+        return;
+      }
+      try {
+        try { cache = await caches.open(CACHE_NAME); }
+        catch (error) { console.warn("Persistent cache unavailable", error); }
+        // Download immediately; do not wait for poster detection or camera permission.
+        const modelBlob = await download("model.glb", "garden model");
+        message("Preparing the 3D garden…", "The download is complete. Preparing textures and geometry.");
+        progress.removeAttribute("value");
+        if (!scene.hasLoaded) await new Promise((resolve, reject) => {
+          const loaded = () => { clearTimeout(timer); resolve(); };
+          const timer = setTimeout(() => {
+            scene.removeEventListener("loaded", loaded);
+            reject(new Error("AR scene initialization timed out"));
+          }, 30000);
+          scene.addEventListener("loaded", loaded, {once: true});
+        });
+        await loadModel(modelBlob);
+        void save("model.glb", modelBlob);
+        posterBlob = await download("poster.mind", "poster recognition");
+        // The system copies component settings during init; set its source before start().
+        scene.systems["mindar-image-system"].imageTargetSrc = blobURL(posterBlob);
+        progress.hidden = true;
+        start.hidden = false;
+        message("The garden is ready.", "Tap Start AR, allow camera access, then point at the poster.");
+      } catch (error) {
+        console.error(error);
+        fail("Unable to prepare the garden. Please try again.");
+      }
+    }
+    void prepare();
+  })();
+  </script>
 </body>
 </html>
