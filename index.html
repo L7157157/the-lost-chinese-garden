@@ -99,26 +99,54 @@ document.addEventListener("DOMContentLoaded", () => {
   const target = document.getElementById("target");
   const model = document.getElementById("model");
 
-  // 初始提示
-  hint.textContent = "Scan the poster to view the model of The Lost Chinese Garden.";
+  let targetVisible = false;
+  let modelReady = false;
+  let modelFailed = false;
+  let hasSeenTarget = false;
+
+  function updateView() {
+    model.setAttribute("visible", targetVisible && modelReady);
+    if (modelFailed) {
+      hint.textContent = "The model could not load. Check your connection and reload the page.";
+    } else if (!targetVisible) {
+      hint.textContent = hasSeenTarget
+        ? "Keep the poster in view to continue exploring."
+        : "Scan the poster to view the model of The Lost Chinese Garden.";
+    } else if (!modelReady) {
+      hint.textContent = "Loading the model of The Lost Chinese Garden…";
+    } else {
+      hint.textContent =
+        "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
+    }
+  }
+
+  // Listen independently of poster detection: either event can happen first.
+  model.addEventListener("model-loaded", () => {
+    modelReady = true;
+    modelFailed = false;
+    updateView();
+  });
+
+  model.addEventListener("model-error", () => {
+    modelReady = false;
+    modelFailed = true;
+    updateView();
+  });
 
   target.addEventListener("targetFound", () => {
-    hint.textContent = "Loading the model of The Lost Chinese Garden…";
-
-    model.addEventListener(
-      "model-loaded",
-      () => {
-        model.setAttribute("visible", "true");
-        hint.textContent =
-          "The model of The Lost Chinese Garden is now revealed. Move your phone to explore.";
-      },
-      { once: true }
-    );
+    targetVisible = true;
+    hasSeenTarget = true;
+    updateView();
   });
 
   target.addEventListener("targetLost", () => {
-    hint.textContent = "Keep the poster in view to continue exploring.";
+    targetVisible = false;
+    updateView();
   });
+
+  // A cached model may already have finished before DOMContentLoaded.
+  modelReady = Boolean(model.getObject3D("mesh"));
+  updateView();
 });
 </script>
 </body>
