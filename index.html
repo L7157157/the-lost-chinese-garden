@@ -230,6 +230,63 @@
       return url;
     }
 
+    function applyHologram() {
+      const THREE = AFRAME.THREE;
+      const root = model.getObject3D("mesh");
+      if (!root) throw new Error("The model has no mesh");
+
+      // A small shared texture adds fine scan lines without extra geometry or bloom.
+      const canvas = document.createElement("canvas");
+      canvas.width = 4;
+      canvas.height = 64;
+      const context = canvas.getContext("2d");
+      context.fillStyle = "#78999c";
+      context.fillRect(0, 0, 4, 64);
+      context.fillStyle = "#d5ffff";
+      context.fillRect(0, 0, 4, 8);
+      context.fillStyle = "#a3cacc";
+      context.fillRect(0, 8, 4, 8);
+      const scanLines = new THREE.CanvasTexture(canvas);
+      scanLines.wrapS = scanLines.wrapT = THREE.RepeatWrapping;
+      scanLines.repeat.set(1, 24);
+
+      const materials = new Map();
+      const convert = original => {
+        if (materials.has(original)) return materials.get(original);
+        // Keep geometry, surface textures, normal maps, and cutout silhouettes.
+        const material = original.isMeshStandardMaterial
+          ? original.clone()
+          : new THREE.MeshStandardMaterial({
+              map: original.map || null,
+              alphaMap: original.alphaMap || null,
+              alphaTest: original.alphaTest || 0,
+              side: original.side,
+              vertexColors: original.vertexColors
+            });
+        material.color.set("#63dce8");
+        material.emissive.set("#19cce6");
+        material.emissiveIntensity = 0.65;
+        material.emissiveMap = scanLines;
+        material.metalness = 0.15;
+        material.roughness = 0.42;
+        // Nearly solid, with normal depth testing so architectural layers stay readable.
+        material.opacity = 0.94;
+        material.transparent = true;
+        material.depthWrite = true;
+        material.depthTest = true;
+        material.blending = THREE.NormalBlending;
+        if (material.isMeshPhysicalMaterial) material.transmission = 0;
+        material.needsUpdate = true;
+        materials.set(original, material);
+        return material;
+      };
+      root.traverse(node => {
+        if (!node.isMesh || !node.material) return;
+        node.material = Array.isArray(node.material)
+          ? node.material.map(convert) : convert(node.material);
+      });
+    }
+
     function loadModel(blob) {
       return new Promise((resolve, reject) => {
         const cleanup = () => {
@@ -237,7 +294,14 @@
           model.removeEventListener("model-loaded", loaded);
           model.removeEventListener("model-error", error);
         };
-        const loaded = () => { cleanup(); modelReady = true; resolve(); };
+        const loaded = () => {
+          cleanup();
+          try {
+            applyHologram();
+            modelReady = true;
+            resolve();
+          } catch (error) { reject(error); }
+        };
         const error = () => { cleanup(); reject(new Error("Model parsing failed")); };
         const timer = setTimeout(() => {
           cleanup(); reject(new Error("Model parsing timed out"));
