@@ -235,25 +235,11 @@
       const root = model.getObject3D("mesh");
       if (!root) throw new Error("The model has no mesh");
 
-      // Measure in model space, independent of UVs and the tracked poster's pose.
-      const bounds = new THREE.Box3();
-      const localMatrix = new THREE.Matrix4();
-      root.traverse(node => {
-        if (!node.isMesh || !node.geometry) return;
-        node.geometry.computeBoundingBox();
-        localMatrix.identity();
-        for (let part = node; part && part !== model.object3D; part = part.parent) {
-          if (part.matrixAutoUpdate) part.updateMatrix();
-          localMatrix.premultiply(part.matrix);
-        }
-        bounds.union(node.geometry.boundingBox.clone().applyMatrix4(localMatrix));
-      });
-      if (bounds.isEmpty()) throw new Error("The model has no geometry");
+      // Screen-space bands stay horizontal even on sloped roofs and rotated posters.
+      const viewportSize = new THREE.Vector2();
       const uniforms = {
         uHoloTime: {value: 0},
-        uHoloInverse: {value: new THREE.Matrix4()},
-        uHoloBottom: {value: bounds.min.y},
-        uHoloHeight: {value: Math.max(bounds.max.y - bounds.min.y, 0.001)}
+        uHoloViewportHeight: {value: 1}
       };
       const startedAt = performance.now();
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -279,24 +265,9 @@
         });
         material.onBeforeCompile = shader => {
           Object.assign(shader.uniforms, uniforms);
-          shader.vertexShader = `
-            uniform mat4 uHoloInverse;
-            varying float vHoloY;
-          ` + shader.vertexShader;
-          shader.vertexShader = shader.vertexShader.replace(
-            "#include <project_vertex>",
-            `#include <project_vertex>
-             vec4 holoPosition = vec4(transformed, 1.0);
-             #ifdef USE_INSTANCING
-               holoPosition = instanceMatrix * holoPosition;
-             #endif
-             vHoloY = (uHoloInverse * modelMatrix * holoPosition).y;`
-          );
           shader.fragmentShader = `
             uniform float uHoloTime;
-            uniform float uHoloBottom;
-            uniform float uHoloHeight;
-            varying float vHoloY;
+            uniform float uHoloViewportHeight;
           ` + shader.fragmentShader;
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <map_fragment>",
@@ -306,27 +277,27 @@
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <emissivemap_fragment>",
             `#include <emissivemap_fragment>
-             float height = (vHoloY - uHoloBottom) / uHoloHeight;
-             // Subtract time so the horizontal bands travel upward, one height / 40s.
-             float phase = (height - uHoloTime * 0.025) * 32.0;
+             float height = gl_FragCoord.y / max(uHoloViewportHeight, 1.0);
+             // Gentle bands travel upward across the screen, independent of mesh UVs.
+             float phase = (height - uHoloTime * 0.018) * 24.0;
              float wave = 0.5 + 0.5 * cos(phase * 6.2831853);
-             float scan = smoothstep(0.86, 0.99, wave);
+             float scan = smoothstep(0.50, 0.98, wave);
              // Fade fine lines at a distance to reduce shimmering on phone screens.
              scan *= 1.0 - smoothstep(0.2, 0.65, fwidth(phase));
              float facingEdge = clamp(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
-             float rim = pow(facingEdge, 2.5);
-             float outerRim = pow(facingEdge, 7.0);
+             float rim = pow(facingEdge, 1.35);
+             float outerRim = pow(facingEdge, 4.5);
              float flicker = 1.0 + 0.018 * sin(uHoloTime * 5.1)
                                  + 0.012 * sin(uHoloTime * 8.3);
-             // Teal body, brighter cyan-green shoulder, pale highlights at the silhouette.
-             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.30;
-             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 1.10;
-             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 1.65;
+             // Broad soft teal falloff builds into a brighter, pale silhouette.
+             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.16;
+             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 1.65;
+             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 2.20;
              totalEmissiveRadiance *= flicker;
              diffuseColor.a *= clamp(0.96 + rim * 0.08 + scan * 0.025, 0.0, 1.0);`
           );
         };
-        material.customProgramCacheKey = () => "garden-hologram-height-v3";
+        material.customProgramCacheKey = () => "garden-hologram-soft-screen-v4";
         materials.set(original, material);
         return material;
       };
@@ -338,7 +309,8 @@
         node.onBeforeRender = function (...args) {
           previousRender.apply(this, args);
           uniforms.uHoloTime.value = reduceMotion.matches ? 0 : (performance.now() - startedAt) / 1000;
-          uniforms.uHoloInverse.value.copy(model.object3D.matrixWorld).invert();
+          args[0].getDrawingBufferSize(viewportSize);
+          uniforms.uHoloViewportHeight.value = viewportSize.y;
         };
       });
     }
