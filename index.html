@@ -235,48 +235,93 @@
       const root = model.getObject3D("mesh");
       if (!root) throw new Error("The model has no mesh");
 
-      // A small shared texture adds fine scan lines without extra geometry or bloom.
-      const canvas = document.createElement("canvas");
-      canvas.width = 4;
-      canvas.height = 64;
-      const context = canvas.getContext("2d");
-      context.fillStyle = "#78999c";
-      context.fillRect(0, 0, 4, 64);
-      context.fillStyle = "#d5ffff";
-      context.fillRect(0, 0, 4, 8);
-      context.fillStyle = "#a3cacc";
-      context.fillRect(0, 8, 4, 8);
-      const scanLines = new THREE.CanvasTexture(canvas);
-      scanLines.wrapS = scanLines.wrapT = THREE.RepeatWrapping;
-      scanLines.repeat.set(1, 24);
-
+      // Measure in model space, independent of UVs and the tracked poster's pose.
+      const bounds = new THREE.Box3();
+      const localMatrix = new THREE.Matrix4();
+      root.traverse(node => {
+        if (!node.isMesh || !node.geometry) return;
+        node.geometry.computeBoundingBox();
+        localMatrix.identity();
+        for (let part = node; part && part !== model.object3D; part = part.parent) {
+          if (part.matrixAutoUpdate) part.updateMatrix();
+          localMatrix.premultiply(part.matrix);
+        }
+        bounds.union(node.geometry.boundingBox.clone().applyMatrix4(localMatrix));
+      });
+      if (bounds.isEmpty()) throw new Error("The model has no geometry");
+      const uniforms = {
+        uHoloTime: {value: 0},
+        uHoloInverse: {value: new THREE.Matrix4()},
+        uHoloBottom: {value: bounds.min.y},
+        uHoloHeight: {value: Math.max(bounds.max.y - bounds.min.y, 0.001)}
+      };
+      const startedAt = performance.now();
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
       const materials = new Map();
       const convert = original => {
         if (materials.has(original)) return materials.get(original);
-        // Keep geometry, surface textures, normal maps, and cutout silhouettes.
-        const material = original.isMeshStandardMaterial
-          ? original.clone()
-          : new THREE.MeshStandardMaterial({
-              map: original.map || null,
-              alphaMap: original.alphaMap || null,
-              alphaTest: original.alphaTest || 0,
-              side: original.side,
-              vertexColors: original.vertexColors
-            });
-        material.color.set("#63dce8");
-        material.emissive.set("#19cce6");
-        material.emissiveIntensity = 0.65;
-        material.emissiveMap = scanLines;
-        material.metalness = 0.15;
-        material.roughness = 0.42;
-        // Nearly solid, with normal depth testing so architectural layers stay readable.
-        material.opacity = 0.94;
-        material.transparent = true;
-        material.depthWrite = true;
-        material.depthTest = true;
-        material.blending = THREE.NormalBlending;
-        if (material.isMeshPhysicalMaterial) material.transmission = 0;
-        material.needsUpdate = true;
+        const material = new THREE.MeshStandardMaterial({
+          color: "#329cbb",
+          emissive: "#087b9e",
+          emissiveIntensity: 0.45,
+          roughness: 0.5,
+          metalness: 0.1,
+          opacity: 0.8,
+          transparent: true,
+          depthWrite: true,
+          depthTest: true,
+          side: original.side,
+          // Retain cutout silhouettes without the original colored surface texture.
+          map: original.map || null,
+          alphaMap: original.alphaMap || null,
+          alphaTest: original.alphaTest || 0,
+          blending: THREE.NormalBlending
+        });
+        material.onBeforeCompile = shader => {
+          Object.assign(shader.uniforms, uniforms);
+          shader.vertexShader = `
+            uniform mat4 uHoloInverse;
+            varying float vHoloY;
+          ` + shader.vertexShader;
+          shader.vertexShader = shader.vertexShader.replace(
+            "#include <project_vertex>",
+            `#include <project_vertex>
+             vec4 holoPosition = vec4(transformed, 1.0);
+             #ifdef USE_INSTANCING
+               holoPosition = instanceMatrix * holoPosition;
+             #endif
+             vHoloY = (uHoloInverse * modelMatrix * holoPosition).y;`
+          );
+          shader.fragmentShader = `
+            uniform float uHoloTime;
+            uniform float uHoloBottom;
+            uniform float uHoloHeight;
+            varying float vHoloY;
+          ` + shader.fragmentShader;
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <map_fragment>",
+            `#include <map_fragment>
+             diffuseColor.rgb = diffuse;`
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <emissivemap_fragment>",
+            `#include <emissivemap_fragment>
+             float height = (vHoloY - uHoloBottom) / uHoloHeight;
+             // Subtract time so the horizontal bands travel upward, one height / 40s.
+             float phase = (height - uHoloTime * 0.025) * 32.0;
+             float wave = 0.5 + 0.5 * cos(phase * 6.2831853);
+             float scan = smoothstep(0.86, 0.99, wave);
+             // Fade fine lines at a distance to reduce shimmering on phone screens.
+             scan *= 1.0 - smoothstep(0.2, 0.65, fwidth(phase));
+             float rim = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.5);
+             float flicker = 1.0 + 0.018 * sin(uHoloTime * 5.1)
+                                 + 0.012 * sin(uHoloTime * 8.3);
+             totalEmissiveRadiance += vec3(0.10, 0.72, 0.95) * (rim * 1.25 + scan * 0.32);
+             totalEmissiveRadiance *= flicker;
+             diffuseColor.a *= clamp(0.96 + rim * 0.08 + scan * 0.025, 0.0, 1.0);`
+          );
+        };
+        material.customProgramCacheKey = () => "garden-hologram-height-v2";
         materials.set(original, material);
         return material;
       };
@@ -284,6 +329,12 @@
         if (!node.isMesh || !node.material) return;
         node.material = Array.isArray(node.material)
           ? node.material.map(convert) : convert(node.material);
+        const previousRender = node.onBeforeRender;
+        node.onBeforeRender = function (...args) {
+          previousRender.apply(this, args);
+          uniforms.uHoloTime.value = reduceMotion.matches ? 0 : (performance.now() - startedAt) / 1000;
+          uniforms.uHoloInverse.value.copy(model.object3D.matrixWorld).invert();
+        };
       });
     }
 
