@@ -72,6 +72,7 @@
 
   <!-- AR 场景 -->
   <a-scene
+    gltf-model="meshoptDecoderPath: ./vendor/meshopt_decoder-0.20.0.js"
     mindar-image="autoStart: false; uiLoading: no; uiScanning: no; uiError: no; maxTrack: 1; missTolerance: 8; warmupTolerance: 5; filterMinCF: 0.0001; filterBeta: 0.001;"
     embedded
     vr-mode-ui="enabled:false"
@@ -111,9 +112,9 @@
 
   <script>
   (() => {
-    // Bump ASSET_VERSION whenever model.glb or poster.mind changes.
+    // Bump ASSET_VERSION whenever model-optimized.glb or poster.mind changes.
     // Deploy a self-contained GLB (embedded textures) beside this HTML over HTTPS.
-    const ASSET_VERSION = "festival-3";
+    const ASSET_VERSION = "festival-4-meshopt";
     const CACHE_NAME = "lost-garden-assets";
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
     const scene = document.querySelector("a-scene");
@@ -379,7 +380,7 @@
       retry.disabled = true;
       // Drop only this artwork's current resources, including a possibly corrupt download.
       try {
-        await Promise.all(["model.glb", "poster.mind"].map(name => cache?.delete(assetURL(name))));
+        await Promise.all(["model-optimized.glb", "poster.mind"].map(name => cache?.delete(assetURL(name))));
       } catch (error) { console.warn(error); }
       location.reload();
     });
@@ -413,7 +414,7 @@
         try { cache = await caches.open(CACHE_NAME); }
         catch (error) { console.warn("Persistent cache unavailable", error); }
         // Download immediately; do not wait for poster detection or camera permission.
-        const modelBlob = await download("model.glb", "garden model");
+        const modelBlob = await download("model-optimized.glb", "garden model");
         message("Preparing the 3D garden…", "The download is complete. Preparing textures and geometry.");
         progress.removeAttribute("value");
         if (!scene.hasLoaded) await new Promise((resolve, reject) => {
@@ -425,7 +426,7 @@
           scene.addEventListener("loaded", loaded, {once: true});
         });
         await loadModel(modelBlob);
-        void save("model.glb", modelBlob);
+        void save("model-optimized.glb", modelBlob);
         posterBlob = await download("poster.mind", "poster recognition");
         // The system copies component settings during init; set its source before start().
         scene.systems["mindar-image-system"].imageTargetSrc = blobURL(posterBlob);
