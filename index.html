@@ -32,7 +32,7 @@
       background: transparent;
     }
 
-    /* 顶部提示条 */
+    /* Full-screen memory introduction; compact overlay after camera startup. */
     #hint {
       position: fixed;
       top: 0;
@@ -55,19 +55,75 @@
       border: 0; border-radius: 8px; background: white; color: #111;
       font: inherit; cursor: pointer;
     }
+    #hint.intro {
+      inset: 0;
+      min-height: 100%;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      padding: max(32px, env(safe-area-inset-top)) 7vw max(32px, env(safe-area-inset-bottom));
+      text-align: left;
+      color: #dffbf4;
+      background: radial-gradient(ellipse at 80% 30%, #154845 0%, transparent 60%), #071b1c;
+      overflow-y: auto;
+    }
+    #hint.intro::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: repeating-linear-gradient(0deg, transparent 0 5px, #91ffe906 5px 6px);
+    }
+    .intro-only { display: none; }
+    .intro .intro-only { display: block; }
+    .intro .eyebrow { font-size: 11px; letter-spacing: 0.24em; color: #8fc6bc; }
+    .intro .archive-title {
+      margin-top: 6vh !important;
+      font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+      font-size: clamp(44px, 12vw, 88px);
+      line-height: 1.15;
+      letter-spacing: -0.04em;
+      color: #e9eee0;
+    }
+    .intro .archive-note { margin: 24px 0 5vh !important; color: #a4bfb8; line-height: 1.9; font-size: 14px; }
+    .intro #status { font-size: clamp(25px, 7vw, 42px); font-weight: 500; letter-spacing: 0.06em; }
+    .intro #detail { margin-top: 12px; line-height: 1.8; font-size: 14px; max-width: 36em; }
+    .intro progress { width: 100%; margin-top: 24px; accent-color: #8cf5df; }
+    .intro button {
+      width: 100%; min-height: 68px; margin-top: 30px; padding: 20px;
+      border: 1px solid #9ff5df; border-radius: 2px;
+      background: #b3f5df; color: #082e2a; font-size: 20px; letter-spacing: 0.16em;
+      box-shadow: 0 0 36px #6be8cf20;
+    }
+    button:focus-visible { outline: 3px solid #ffffff; outline-offset: 5px; }
+    .intro .archive-footer { margin-top: 5vh !important; font-size: 10px; letter-spacing: 0.17em; color: #8fc6bc; }
+    @media (min-width: 700px) {
+      #hint.intro { padding-left: max(7vw, calc((100vw - 640px) / 2)); padding-right: max(7vw, calc((100vw - 640px) / 2)); }
+    }
+    @media (max-height: 650px) {
+      #hint.intro { justify-content: flex-start; }
+      .intro .archive-title { margin-top: 20px !important; font-size: 40px; }
+      .intro .archive-note { margin: 14px 0 20px !important; }
+      .intro .archive-footer { margin-top: 24px !important; }
+    }
     [hidden] { display: none !important; }
   </style>
 </head>
 
 <body>
   <!-- 提示 UI -->
-  <div id="hint">
-    <p id="status" role="status" aria-live="polite">Preparing The Lost Chinese Garden…</p>
-    <p id="detail">Please keep this page open.</p>
-    <progress id="progress" aria-label="Resource download progress" max="100"></progress>
-    <br />
-    <button id="start" type="button" hidden>Start AR</button>
-    <button id="retry" type="button" hidden>Try again</button>
+  <div id="hint" class="intro">
+    <p class="intro-only eyebrow">THE LOST CHINESE GARDEN / 记忆档案</p>
+    <p class="intro-only archive-title">旧报之间，<br>花园重现。</p>
+    <p class="intro-only archive-note">一张历史报纸，一座消逝的花园。<br>让镜头穿过纸上的文字，重访被时间收藏的记忆。</p>
+    <p id="status" role="status" aria-live="polite">正在唤醒记忆…</p>
+    <p id="detail">请保持页面开启，稍后便可进入。</p>
+    <progress id="progress" aria-label="记忆加载进度" max="100"></progress>
+    <button id="start" type="button" hidden>开始回忆</button>
+    <button id="retry" type="button" hidden>重新尝试</button>
+    <p class="intro-only archive-footer">历史报纸 · 增强现实记忆体验</p>
   </div>
 
   <!-- AR 场景 -->
@@ -84,12 +140,12 @@
     <!-- Even illumination keeps shaded parts of the model visible. -->
     <a-entity light="type: ambient; color: #ffffff; intensity: 1.5"></a-entity>
 
-    <!-- 海报识别目标 -->
+    <!-- 历史报纸识别目标 -->
     <a-entity
       id="target"
       mindar-image-target="targetIndex: 0"
     >
-      <!-- Lights follow the poster so illumination stays consistent while viewing. -->
+      <!-- Lights follow the newspaper so illumination stays consistent while viewing. -->
       <a-entity
         light="type: directional; color: #ffffff; intensity: 2"
         position="2 4 3"
@@ -114,13 +170,14 @@
   (() => {
     // Bump ASSET_VERSION whenever model-optimized.glb or poster.mind changes.
     // Deploy a self-contained GLB (embedded textures) beside this HTML over HTTPS.
-    const ASSET_VERSION = "festival-6-model";
+    const ASSET_VERSION = "festival-7-memory";
     const CACHE_NAME = "lost-garden-assets";
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
     const scene = document.querySelector("a-scene");
     const model = document.getElementById("model");
     const target = document.getElementById("target");
     const status = document.getElementById("status");
+    const hint = document.getElementById("hint");
     const detail = document.getElementById("detail");
     const progress = document.getElementById("progress");
     const start = document.getElementById("start");
@@ -145,19 +202,20 @@
       if (failed || !arReady) return;
       if (document.hidden) return;
       message(targetVisible
-        ? "The Lost Chinese Garden is revealed."
-        : seenTarget ? "Keep the poster in view to continue exploring."
-        : "Point your camera at the poster.",
-        targetVisible ? "Move slowly to explore the garden." : "Keep the whole poster in view and hold your phone steady.");
+        ? "记忆中的花园，正在重现。"
+        : seenTarget ? "请将历史报纸重新放入画面，继续回忆。"
+        : "请将镜头对准历史报纸。",
+        targetVisible ? "缓缓移动镜头，探索记忆中的花园。" : "让整张历史报纸进入画面，并保持手机平稳。");
     }
 
     function fail(text) {
       failed = true;
+      hint.classList.add("intro");
       clearTimeout(arTimer);
       progress.hidden = true;
       start.hidden = true;
       retry.hidden = false;
-      message(text, "Check your connection and camera permission, then try again.");
+      message(text, "请检查网络连接和相机权限，然后重新尝试。");
       updateView();
       // Also release the camera if startup stalled before arReady.
       const system = scene.systems?.["mindar-image-system"];
@@ -167,12 +225,12 @@
 
     async function download(name, label) {
       const url = assetURL(name);
-      message(`Preparing ${label}…`);
+      message(`正在准备${label}…`);
       progress.removeAttribute("value");
       try {
         const hit = await cache?.match(url);
         if (hit) {
-          message(`Loading saved ${label}…`);
+          message(`正在读取已保存的${label}…`);
           return await hit.blob();
         }
       } catch (error) { console.warn("Cache read unavailable", error); }
@@ -205,10 +263,10 @@
             if (total > 0 && received <= total) {
               const percent = Math.floor(received / total * 100);
               progress.value = percent;
-              message(`Downloading ${label} · ${percent}%`, `${mb} MB received`);
+              message(`正在加载${label} · ${percent}%`, `已加载 ${mb} MB`);
             } else {
               progress.removeAttribute("value");
-              message(`Downloading ${label}…`, `${mb} MB received`);
+              message(`正在加载${label}…`, `已加载 ${mb} MB`);
             }
           }
           blob = new Blob(chunks, {type: response.headers.get("content-type") || "application/octet-stream"});
@@ -240,7 +298,8 @@
       const viewportSize = new THREE.Vector2();
       const uniforms = {
         uHoloTime: {value: 0},
-        uHoloViewportHeight: {value: 1}
+        uHoloViewportHeight: {value: 1},
+        uHoloFlash: {value: 0}
       };
       const startedAt = performance.now();
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -248,9 +307,9 @@
       const convert = original => {
         if (materials.has(original)) return materials.get(original);
         const material = new THREE.MeshStandardMaterial({
-          color: "#269f9e",
+          color: original.color ? original.color.clone() : new THREE.Color("#ffffff"),
           emissive: "#087f80",
-          emissiveIntensity: 0.35,
+          emissiveIntensity: 0.65,
           roughness: 0.5,
           metalness: 0.1,
           opacity: 0.8,
@@ -258,7 +317,7 @@
           depthWrite: true,
           depthTest: true,
           side: original.side,
-          // Retain cutout silhouettes without the original colored surface texture.
+          // Preserve original texture color and cutout silhouettes before the teal mix.
           map: original.map || null,
           alphaMap: original.alphaMap || null,
           alphaTest: original.alphaTest || 0,
@@ -269,11 +328,16 @@
           shader.fragmentShader = `
             uniform float uHoloTime;
             uniform float uHoloViewportHeight;
+            uniform float uHoloFlash;
           ` + shader.fragmentShader;
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <map_fragment>",
             `#include <map_fragment>
-             diffuseColor.rgb = diffuse;`
+             // Keep 24% of the original material + texture color beneath the cyan tint.
+             vec3 memoryColor = diffuseColor.rgb;
+             float memoryLuma = dot(memoryColor, vec3(0.2126, 0.7152, 0.0722));
+             vec3 tealColor = vec3(0.025, 0.42, 0.39) * (0.55 + memoryLuma * 0.65);
+             diffuseColor.rgb = mix(tealColor, memoryColor, 0.24);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <emissivemap_fragment>",
@@ -291,14 +355,17 @@
              float flicker = 1.0 + 0.018 * sin(uHoloTime * 5.1)
                                  + 0.012 * sin(uHoloTime * 8.3);
              // Broad soft teal falloff builds into a brighter, pale silhouette.
-             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.16;
-             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 1.65;
-             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 2.20;
+             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.32;
+             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 2.35;
+             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 3.20;
+             totalEmissiveRadiance += diffuseColor.rgb * 0.3;
              totalEmissiveRadiance *= flicker;
+             // One bright cyan-white pulse every three seconds, confined to the model.
+             totalEmissiveRadiance += vec3(0.60, 1.00, 0.94) * uHoloFlash * 3.8;
              diffuseColor.a *= clamp(0.96 + rim * 0.08 + scan * 0.025, 0.0, 1.0);`
           );
         };
-        material.customProgramCacheKey = () => "garden-hologram-soft-screen-v4";
+        material.customProgramCacheKey = () => "garden-memory-hologram-v5";
         materials.set(original, material);
         return material;
       };
@@ -309,7 +376,12 @@
         const previousRender = node.onBeforeRender;
         node.onBeforeRender = function (...args) {
           previousRender.apply(this, args);
-          uniforms.uHoloTime.value = reduceMotion.matches ? 0 : (performance.now() - startedAt) / 1000;
+          const elapsed = (performance.now() - startedAt) / 1000;
+          uniforms.uHoloTime.value = reduceMotion.matches ? 0 : elapsed;
+          const pulseTime = elapsed % 3;
+          // Smooth 0.32-second pulse; reduced-motion mode keeps steady illumination.
+          uniforms.uHoloFlash.value = !reduceMotion.matches && elapsed >= 3 && pulseTime < 0.32
+            ? Math.pow(Math.sin(Math.PI * pulseTime / 0.32), 2) : 0;
           args[0].getDrawingBufferSize(viewportSize);
           uniforms.uHoloViewportHeight.value = viewportSize.y;
         };
@@ -350,7 +422,7 @@
       targetVisible = false;
       updateView();
     });
-    scene.addEventListener("arError", () => fail("Unable to start the camera. Please allow camera access."));
+    scene.addEventListener("arError", () => fail("无法启动相机，请允许相机访问。"));
     let posterBlob;
     scene.addEventListener("arReady", () => {
       if (failed) {
@@ -359,6 +431,7 @@
       }
       clearTimeout(arTimer);
       arReady = true;
+      hint.classList.remove("intro");
       starting = false;
       progress.hidden = true;
       void save("poster.mind", posterBlob);
@@ -371,10 +444,10 @@
       start.hidden = true;
       progress.hidden = false;
       progress.removeAttribute("value");
-      message("Starting camera…", "Allow camera access when prompted.");
-      arTimer = setTimeout(() => fail("Camera setup is taking too long."), 60000);
+      message("正在开启回忆…", "请在提示出现时允许相机访问。");
+      arTimer = setTimeout(() => fail("相机启动超时，请重新尝试。"), 60000);
       try { scene.systems["mindar-image-system"].start(); }
-      catch (error) { console.error(error); fail("Unable to start AR on this device."); }
+      catch (error) { console.error(error); fail("暂时无法在此设备上开启回忆。"); }
     });
     retry.addEventListener("click", async () => {
       retry.disabled = true;
@@ -403,19 +476,19 @@
 
     async function prepare() {
       if (!window.AFRAME || !AFRAME.components["mindar-image"]) {
-        fail("AR could not load. Please check your connection.");
+        fail("记忆体验加载失败，请检查网络连接。");
         return;
       }
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        fail("Open this experience in Safari or Chrome using its HTTPS link.");
+        fail("请使用 Safari 或 Chrome，通过 HTTPS 链接打开体验。");
         return;
       }
       try {
         try { cache = await caches.open(CACHE_NAME); }
         catch (error) { console.warn("Persistent cache unavailable", error); }
         // Download immediately; do not wait for poster detection or camera permission.
-        const modelBlob = await download("model-optimized.glb", "garden model");
-        message("Preparing the 3D garden…", "The download is complete. Preparing textures and geometry.");
+        const modelBlob = await download("model-optimized.glb", "花园记忆");
+        message("正在还原花园…", "下载已完成，正在整理记忆中的细节。");
         progress.removeAttribute("value");
         if (!scene.hasLoaded) await new Promise((resolve, reject) => {
           const loaded = () => { clearTimeout(timer); resolve(); };
@@ -427,15 +500,15 @@
         });
         await loadModel(modelBlob);
         void save("model-optimized.glb", modelBlob);
-        posterBlob = await download("poster.mind", "poster recognition");
+        posterBlob = await download("poster.mind", "历史报纸识别数据");
         // The system copies component settings during init; set its source before start().
         scene.systems["mindar-image-system"].imageTargetSrc = blobURL(posterBlob);
         progress.hidden = true;
         start.hidden = false;
-        message("The garden is ready.", "Tap Start AR, allow camera access, then point at the poster.");
+        message("记忆已经加载", "点击「开始回忆」，允许相机访问，再将镜头对准历史报纸。");
       } catch (error) {
         console.error(error);
-        fail("Unable to prepare the garden. Please try again.");
+        fail("记忆加载失败，请重新尝试。");
       }
     }
     void prepare();
