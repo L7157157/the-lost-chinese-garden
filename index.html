@@ -130,6 +130,27 @@
       box-shadow: 0 0 36px #e7a28c30;
     }
     #hint.intro #start { border-radius: 999px; }
+    #camera-exit {
+      position: fixed;
+      z-index: 10001;
+      left: 50%;
+      bottom: max(16px, env(safe-area-inset-bottom));
+      width: min(92vw, 380px);
+      min-height: 48px;
+      margin: 0;
+      padding: 12px 18px;
+      transform: translateX(-50%);
+      border: 1px solid #b5f6e5;
+      border-radius: 999px;
+      background: rgba(10, 35, 34, 0.9);
+      color: #e5fff8;
+      font-size: clamp(12px, 3.4vw, 14px);
+      font-weight: 600;
+      line-height: 1.35;
+      letter-spacing: 0.03em;
+      box-shadow: 0 4px 22px #00141166;
+      backdrop-filter: blur(8px);
+    }
     .title-zh { display: block; margin-top: 14px; font-size: 0.68em; letter-spacing: 0.02em; }
     #start span { display: block; }
     #start span + span { margin-top: 6px; font-size: 0.85em; }
@@ -161,6 +182,7 @@
     <button id="start" type="button" hidden><span lang="en">Begin remembering</span><span>開始回憶</span></button>
     <button id="retry" type="button" hidden>Try again / 重新嘗試</button>
   </div>
+  <button id="camera-exit" type="button" hidden>Press to Exit, Then Continue to the Archive</button>
 
   <!-- AR 场景 -->
   <a-scene
@@ -232,6 +254,7 @@
     const progress = document.getElementById("progress");
     const start = document.getElementById("start");
     const retry = document.getElementById("retry");
+    const cameraExit = document.getElementById("camera-exit");
     let cache;
     let modelLoaded = false;
     let arReady = false;
@@ -327,6 +350,7 @@
       progress.hidden = true;
       start.hidden = true;
       retry.hidden = false;
+      cameraExit.hidden = true;
       message(text, "Check your connection and camera permission, then try again. / 請檢查網絡連線和相機權限，然後重新嘗試。");
       updateView();
       // Also release the camera if startup stalled before arReady.
@@ -559,6 +583,7 @@
       hint.classList.remove("intro");
       starting = false;
       progress.hidden = true;
+      cameraExit.hidden = false;
       void save("poster.mind", posterBlob);
       updateView();
       if (document.hidden) scene.systems["mindar-image-system"].pause(true);
@@ -573,6 +598,24 @@
       arTimer = setTimeout(() => fail("Camera startup timed out. Please try again. / 相機啟動逾時，請重新嘗試。"), 60000);
       try { scene.systems["mindar-image-system"].start(); }
       catch (error) { console.error(error); fail("Unable to start this experience on your device. / 暫時無法在此裝置上開啟回憶。"); }
+    });
+    cameraExit.addEventListener("click", () => {
+      const system = scene.systems["mindar-image-system"];
+      system?.pause();
+      system?.video?.srcObject?.getTracks().forEach(track => track.stop());
+      targetVisible = false;
+      targetStable = false;
+      clearTimeout(targetStableTimer);
+      targetStableTimer = undefined;
+      arReady = false;
+      hideModel();
+      if (history.length > 1) {
+        history.back();
+        return;
+      }
+      cameraExit.hidden = true;
+      hint.classList.add("intro");
+      message("Camera closed / 相機已關閉", "Continue to the archive. / 可返回檔案頁面繼續瀏覽。");
     });
     retry.addEventListener("click", async () => {
       retry.disabled = true;
