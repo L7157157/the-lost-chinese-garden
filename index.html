@@ -209,14 +209,22 @@
     const progress = document.getElementById("progress");
     const start = document.getElementById("start");
     const retry = document.getElementById("retry");
+    const TARGET_STABILITY_MS = 700;
+    const MODEL_FADE_MS = 400;
+    const MODEL_OPACITY = 0.9;
     let cache;
-    let modelReady = false;
+    let modelLoaded = false;
     let arReady = false;
     let starting = false;
     let targetVisible = false;
+    let targetStable = false;
     let seenTarget = false;
     let failed = false;
     let arTimer;
+    let targetStableTimer;
+    let modelFadeFrame;
+    let modelDisplayed = false;
+    const hologramMaterials = new Set();
     const objectURLs = [];
 
     function message(text, subtext = "") {
@@ -224,8 +232,41 @@
       detail.textContent = subtext.replaceAll(" / ", "\n");
     }
 
+    function setModelOpacity(progress) {
+      hologramMaterials.forEach(material => { material.opacity = MODEL_OPACITY * progress; });
+    }
+
+    function hideModel() {
+      if (modelFadeFrame !== undefined) cancelAnimationFrame(modelFadeFrame);
+      modelFadeFrame = undefined;
+      modelDisplayed = false;
+      model.setAttribute("visible", false);
+      setModelOpacity(0);
+    }
+
+    function fadeInModel() {
+      if (modelDisplayed) return;
+      modelDisplayed = true;
+      model.setAttribute("visible", true);
+      setModelOpacity(0);
+      const startedAt = performance.now();
+      const frame = now => {
+        if (!targetVisible || !targetStable || !modelLoaded || failed || document.hidden) {
+          hideModel();
+          return;
+        }
+        const progress = Math.min((now - startedAt) / MODEL_FADE_MS, 1);
+        setModelOpacity(progress);
+        if (progress < 1) modelFadeFrame = requestAnimationFrame(frame);
+        else modelFadeFrame = undefined;
+      };
+      modelFadeFrame = requestAnimationFrame(frame);
+    }
+
     function updateView() {
-      model.setAttribute("visible", !failed && arReady && modelReady && targetVisible && !document.hidden);
+      const canShowModel = !failed && arReady && modelLoaded && targetVisible && targetStable && !document.hidden;
+      if (canShowModel) fadeInModel();
+      else hideModel();
       if (failed || !arReady) return;
       if (document.hidden) return;
       hint.classList.toggle("scanning", !targetVisible);
@@ -339,7 +380,7 @@
           emissiveIntensity: 0.3,
           roughness: 0.5,
           metalness: 0.1,
-          opacity: 0.9,
+          opacity: 0,
           transparent: true,
           depthWrite: true,
           depthTest: true,
@@ -390,6 +431,7 @@
         };
         material.customProgramCacheKey = () => "garden-memory-hologram-v6";
         materials.set(original, material);
+        hologramMaterials.add(material);
         return material;
       };
       root.traverse(node => {
@@ -418,7 +460,7 @@
           cleanup();
           try {
             applyHologram();
-            modelReady = true;
+            modelLoaded = true;
             resolve();
           } catch (error) { reject(error); }
         };
@@ -433,12 +475,24 @@
     }
 
     target.addEventListener("targetFound", () => {
+      if (targetVisible) return;
       targetVisible = true;
+      targetStable = false;
       seenTarget = true;
+      clearTimeout(targetStableTimer);
+      targetStableTimer = setTimeout(() => {
+        targetStableTimer = undefined;
+        if (!targetVisible) return;
+        targetStable = true;
+        updateView();
+      }, TARGET_STABILITY_MS);
       updateView();
     });
     target.addEventListener("targetLost", () => {
       targetVisible = false;
+      targetStable = false;
+      clearTimeout(targetStableTimer);
+      targetStableTimer = undefined;
       updateView();
     });
     scene.addEventListener("arError", () => fail("Unable to start the camera. Please allow access. / 無法啟動相機，請允許相機存取。"));
@@ -458,7 +512,7 @@
       if (document.hidden) scene.systems["mindar-image-system"].pause(true);
     });
     start.addEventListener("click", () => {
-      if (starting || arReady || failed || !modelReady) return;
+      if (starting || arReady || failed || !modelLoaded) return;
       starting = true;
       start.hidden = true;
       progress.hidden = false;
@@ -479,10 +533,13 @@
     document.addEventListener("visibilitychange", () => {
       if (!arReady || failed) return;
       const system = scene.systems["mindar-image-system"];
+      targetVisible = false;
+      targetStable = false;
+      clearTimeout(targetStableTimer);
+      targetStableTimer = undefined;
       // Keep the video alive but pause image processing in the background.
       if (document.hidden) system.pause(true);
       else {
-        targetVisible = false;
         // Force a fresh targetFound event after returning to the page.
         target.object3D.visible = false;
         system.unpause();
