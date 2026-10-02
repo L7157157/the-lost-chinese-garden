@@ -66,8 +66,8 @@
       justify-content: center;
       padding: max(32px, env(safe-area-inset-top)) 7vw max(32px, env(safe-area-inset-bottom));
       text-align: left;
-      color: #dffbf4;
-      background: radial-gradient(ellipse at 80% 30%, #154845 0%, transparent 60%), #071b1c;
+      color: #fff0e7;
+      background: radial-gradient(ellipse at 18% 22%, #c78e9a 0%, transparent 55%), radial-gradient(ellipse at 84% 72%, #d79a66 0%, transparent 58%), #514449;
       overflow-y: auto;
     }
     #hint.intro::before {
@@ -75,7 +75,7 @@
       position: absolute;
       inset: 0;
       pointer-events: none;
-      background: repeating-linear-gradient(0deg, transparent 0 5px, #91ffe906 5px 6px);
+      background: repeating-linear-gradient(0deg, transparent 0 5px, #fff0e708 5px 6px);
     }
     .intro-only { display: none; }
     .intro .intro-only { display: block; }
@@ -86,18 +86,19 @@
       font-size: clamp(30px, 8vw, 56px);
       line-height: 1.15;
       letter-spacing: -0.04em;
-      color: #e9eee0;
+      color: #fff3e8;
     }
-    .intro .archive-note { margin: 20px 0 3vh !important; color: #a4bfb8; line-height: 1.9; font-size: 14px; }
+    .intro .archive-note { margin: 20px 0 3vh !important; color: #f0d3c7; line-height: 1.9; font-size: 14px; }
     .intro #status { font-size: clamp(20px, 5.5vw, 30px); font-weight: 500; letter-spacing: 0.06em; }
     .intro #detail { margin-top: 12px; line-height: 1.8; font-size: 14px; max-width: 36em; }
     .intro progress { width: 100%; margin-top: 24px; accent-color: #8cf5df; }
     .intro button {
       width: 100%; min-height: 68px; margin-top: 30px; padding: 20px;
-      border: 1px solid #9ff5df; border-radius: 2px;
-      background: #b3f5df; color: #082e2a; font-size: 20px; letter-spacing: 0.16em;
-      box-shadow: 0 0 36px #6be8cf20;
+      border: 1px solid #f6c5a0; border-radius: 2px;
+      background: #f0b58d; color: #452f32; font-size: 20px; letter-spacing: 0.16em;
+      box-shadow: 0 0 36px #e7a28c30;
     }
+    #hint.intro #start { border-radius: 999px; }
     .title-zh { display: block; margin-top: 14px; font-size: 0.68em; letter-spacing: 0.02em; }
     #start span { display: block; }
     #start span + span { margin-top: 6px; font-size: 0.85em; }
@@ -120,7 +121,7 @@
 <body>
   <!-- 提示 UI -->
   <div id="hint" class="intro">
-    <p class="intro-only archive-title"><span lang="en">Between the pages,<br>a garden returns.</span><span class="title-zh">舊報之間，花園重現。</span></p>
+    <p class="intro-only archive-title"><span lang="en">There was once a Chinese garden here.</span><span class="title-zh">這裡曾經有一座中國花園。</span></p>
     <p class="intro-only archive-note"><span lang="en">This garden was once part of China Court (文華邨), 1976–1986.</span></p>
     <p id="status" role="status" aria-live="polite">Awakening memories… / 正在喚醒記憶…</p>
     <p id="detail">Keep this page open. / 請保持頁面開啟。</p>
