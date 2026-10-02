@@ -438,7 +438,6 @@
         if (materials.has(original)) return materials.get(original);
         const material = original.clone();
         material.transparent = true;
-        material.extensions.derivatives = true;
         material.needsUpdate = true;
         const originalOnBeforeCompile = material.onBeforeCompile;
         const originalProgramCacheKey = material.customProgramCacheKey.bind(material)();
@@ -485,11 +484,10 @@
             `#include <emissivemap_fragment>
              vec3 gridPosition = vHoloModelPosition * uHoloGridScale;
              vec3 gridDistance = abs(fract(gridPosition - 0.5) - 0.5);
-             vec3 gridFootprint = max(fwidth(gridPosition), vec3(0.0001));
-             vec3 gridMask = 1.0 - smoothstep(vec3(uHoloGridLineWidth), vec3(uHoloGridLineWidth) + gridFootprint, gridDistance);
+             vec3 gridMask = 1.0 - smoothstep(vec3(uHoloGridLineWidth), vec3(uHoloGridLineWidth * 1.8), gridDistance);
              float gridLine = max(max(gridMask.x, gridMask.y), gridMask.z);
-             float normalVariation = length(fwidth(normalize(normal)));
-             float edgeLine = smoothstep(0.018, 0.14, normalVariation);
+             float grazingAngle = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
+             float edgeLine = smoothstep(0.72, 0.96, grazingAngle);
              float modelHeight = clamp((vHoloModelPosition.y - uHoloMinY) / uHoloHeight, 0.0, 1.0);
              float scanPosition = fract(uHoloTime / max(uHoloScanSpeed, 0.1));
              float scanDistance = abs(modelHeight - scanPosition);
