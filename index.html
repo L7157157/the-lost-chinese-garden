@@ -211,14 +211,11 @@
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
     // Tune the archival hologram here; grid width is measured in grid cells.
     const HOLOGRAM_OPACITY = 0.9;
-    const HOLOGRAM_CYAN_STRENGTH = 0.2;
-    const GRID_SCALE = 5.0;
-    const GRID_OPACITY = 0.14;
-    const GRID_LINE_WIDTH = 0.025;
-    const EDGE_LINE_OPACITY = 0.24;
-    const SCAN_SPEED = 5.0; // Seconds for one bottom-to-top pass.
-    const SCAN_WIDTH = 0.012; // Half-width as a fraction of model height.
-    const SCAN_INTENSITY = 2.8;
+    const HOLOGRAM_CYAN_STRENGTH = 0.48;
+    const GRID_SCALE = 4.0;
+    const GRID_OPACITY = 0.11;
+    const GRID_LINE_WIDTH = 0.018;
+    const EDGE_LINE_OPACITY = 0.16;
     const TRACKING_STABLE_DELAY = 700;
     const MODEL_FADE_IN_MS = 380;
     const MODEL_FADE_OUT_MS = 150;
@@ -416,23 +413,17 @@
       });
       if (modelBounds.isEmpty()) throw new Error("The model has no measurable geometry");
       const uniforms = {
-        uHoloTime: {value: 0},
         uHoloOpacity: {value: HOLOGRAM_OPACITY * modelOpacityProgress},
         uHoloCyanStrength: {value: HOLOGRAM_CYAN_STRENGTH},
         uHoloGridScale: {value: GRID_SCALE},
         uHoloGridOpacity: {value: GRID_OPACITY},
         uHoloGridLineWidth: {value: GRID_LINE_WIDTH},
         uHoloEdgeOpacity: {value: EDGE_LINE_OPACITY},
-        uHoloScanSpeed: {value: SCAN_SPEED},
-        uHoloScanWidth: {value: SCAN_WIDTH},
-        uHoloScanIntensity: {value: SCAN_INTENSITY},
         uHoloMinY: {value: modelBounds.min.y},
         uHoloHeight: {value: Math.max(modelBounds.max.y - modelBounds.min.y, 0.0001)},
         uHoloWorldToModel: {value: worldToModel.clone()}
       };
       hologramUniforms = uniforms;
-      const startedAt = performance.now();
-      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
       const materials = new Map();
       const convert = original => {
         if (materials.has(original)) return materials.get(original);
@@ -458,16 +449,12 @@
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <common>",
             `#include <common>
-             uniform float uHoloTime;
              uniform float uHoloOpacity;
              uniform float uHoloCyanStrength;
              uniform float uHoloGridScale;
              uniform float uHoloGridOpacity;
              uniform float uHoloGridLineWidth;
              uniform float uHoloEdgeOpacity;
-             uniform float uHoloScanSpeed;
-             uniform float uHoloScanWidth;
-             uniform float uHoloScanIntensity;
              uniform float uHoloMinY;
              uniform float uHoloHeight;
              varying vec3 vHoloModelPosition;`
@@ -488,16 +475,9 @@
              float gridLine = max(max(gridMask.x, gridMask.y), gridMask.z);
              float grazingAngle = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
              float edgeLine = smoothstep(0.72, 0.96, grazingAngle);
-             float modelHeight = clamp((vHoloModelPosition.y - uHoloMinY) / uHoloHeight, 0.0, 1.0);
-             float scanPosition = fract(uHoloTime / max(uHoloScanSpeed, 0.1));
-             float scanDistance = abs(modelHeight - scanPosition);
-             float scanBand = 1.0 - smoothstep(uHoloScanWidth * 0.35, uHoloScanWidth, scanDistance);
-             float scanHalo = exp(-scanDistance / max(uHoloScanWidth * 4.0, 0.001)) * 0.12;
-             float scanLight = scanBand + scanHalo;
              totalEmissiveRadiance += vec3(0.78, 0.96, 0.93) * gridLine * uHoloGridOpacity;
              totalEmissiveRadiance += vec3(0.84, 0.97, 0.95) * edgeLine * uHoloEdgeOpacity;
-             totalEmissiveRadiance += vec3(0.78, 0.98, 0.97) * scanLight * uHoloScanIntensity;
-             totalEmissiveRadiance += vec3(0.48, 0.84, 0.82) * gridLine * scanBand * 0.55;`
+             totalEmissiveRadiance += vec3(0.08, 0.38, 0.36) * diffuseColor.rgb * 0.12;`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <opaque_fragment>",
@@ -513,12 +493,6 @@
         if (!node.isMesh || !node.material) return;
         node.material = Array.isArray(node.material)
           ? node.material.map(convert) : convert(node.material);
-        const previousRender = node.onBeforeRender;
-        node.onBeforeRender = function (...args) {
-          previousRender.apply(this, args);
-          const elapsed = (performance.now() - startedAt) / 1000;
-          uniforms.uHoloTime.value = reduceMotion.matches ? 0 : elapsed;
-        };
       });
     }
 
