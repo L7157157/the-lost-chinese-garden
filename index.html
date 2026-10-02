@@ -103,6 +103,14 @@
     .intro-only { display: none; }
     .intro .intro-only { display: block; }
     .intro .eyebrow { font-size: 11px; letter-spacing: 0.24em; color: #8fc6bc; }
+    .intro .event-heading {
+      margin: 0 !important;
+      color: #f2c3ad;
+      font-size: clamp(14px, 3.5vw, 18px);
+      line-height: 1.55;
+      letter-spacing: 0.08em;
+    }
+    .event-heading span { display: block; }
     .intro .archive-title {
       margin-top: 3vh !important;
       font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
@@ -144,8 +152,9 @@
 <body>
   <!-- 提示 UI -->
   <div id="hint" class="intro">
+    <p class="intro-only event-heading"><span>2026 Nuit Blanche</span><span>Night Market for a Future Garden</span></p>
     <p class="intro-only archive-title"><span lang="en">There was once a Chinese garden here.</span><span class="title-zh">這裡曾經有一座中國花園。</span></p>
-    <p class="intro-only archive-note"><span lang="en">This garden was once part of China Court (文華邨), 1976–1986.</span></p>
+    <p class="intro-only archive-note"><span lang="en">The garden was part of China Court (文華邨), 1976–1986.</span></p>
     <p id="status" role="status" aria-live="polite">Awakening memories… / 正在喚醒記憶…</p>
     <p id="detail">Keep this page open. / 請保持頁面開啟。</p>
     <progress id="progress" aria-label="Memory loading progress / 記憶載入進度" max="100"></progress>
@@ -200,6 +209,19 @@
     const ASSET_VERSION = "festival-7-memory";
     const CACHE_NAME = "lost-garden-assets";
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
+    // Tune the archival hologram here; grid width is measured in grid cells.
+    const HOLOGRAM_OPACITY = 0.9;
+    const HOLOGRAM_CYAN_STRENGTH = 0.2;
+    const GRID_SCALE = 5.0;
+    const GRID_OPACITY = 0.14;
+    const GRID_LINE_WIDTH = 0.025;
+    const EDGE_LINE_OPACITY = 0.24;
+    const SCAN_SPEED = 5.0; // Seconds for one bottom-to-top pass.
+    const SCAN_WIDTH = 0.012; // Half-width as a fraction of model height.
+    const SCAN_INTENSITY = 2.8;
+    const TRACKING_STABLE_DELAY = 700;
+    const MODEL_FADE_IN_MS = 380;
+    const MODEL_FADE_OUT_MS = 150;
     const scene = document.querySelector("a-scene");
     const model = document.getElementById("model");
     const target = document.getElementById("target");
@@ -209,9 +231,6 @@
     const progress = document.getElementById("progress");
     const start = document.getElementById("start");
     const retry = document.getElementById("retry");
-    const TARGET_STABILITY_MS = 700;
-    const MODEL_FADE_MS = 400;
-    const MODEL_OPACITY = 0.9;
     let cache;
     let modelLoaded = false;
     let arReady = false;
@@ -223,8 +242,10 @@
     let arTimer;
     let targetStableTimer;
     let modelFadeFrame;
+    let modelFadeTarget;
     let modelDisplayed = false;
-    const hologramMaterials = new Set();
+    let modelOpacityProgress = 0;
+    let hologramUniforms;
     const objectURLs = [];
 
     function message(text, subtext = "") {
@@ -233,40 +254,61 @@
     }
 
     function setModelOpacity(progress) {
-      hologramMaterials.forEach(material => { material.opacity = MODEL_OPACITY * progress; });
+      modelOpacityProgress = progress;
+      if (hologramUniforms) hologramUniforms.uHoloOpacity.value = HOLOGRAM_OPACITY * progress;
     }
 
     function hideModel() {
       if (modelFadeFrame !== undefined) cancelAnimationFrame(modelFadeFrame);
       modelFadeFrame = undefined;
+      modelFadeTarget = undefined;
       modelDisplayed = false;
       model.setAttribute("visible", false);
       setModelOpacity(0);
     }
 
-    function fadeInModel() {
-      if (modelDisplayed) return;
-      modelDisplayed = true;
-      model.setAttribute("visible", true);
-      setModelOpacity(0);
+    function animateModelOpacity(targetOpacity, duration) {
+      if (modelFadeTarget === targetOpacity) return;
+      if (modelFadeFrame !== undefined) cancelAnimationFrame(modelFadeFrame);
+      modelFadeTarget = targetOpacity;
+      if (targetOpacity > 0) {
+        modelDisplayed = true;
+        model.setAttribute("visible", true);
+      }
+      const initialOpacity = modelOpacityProgress;
       const startedAt = performance.now();
       const frame = now => {
-        if (!targetVisible || !targetStable || !modelLoaded || failed || document.hidden) {
-          hideModel();
+        if (targetOpacity > 0 && (!targetVisible || !targetStable || !modelLoaded || failed || document.hidden)) {
+          modelFadeTarget = undefined;
+          animateModelOpacity(0, MODEL_FADE_OUT_MS);
           return;
         }
-        const progress = Math.min((now - startedAt) / MODEL_FADE_MS, 1);
-        setModelOpacity(progress);
-        if (progress < 1) modelFadeFrame = requestAnimationFrame(frame);
-        else modelFadeFrame = undefined;
+        const progress = Math.min((now - startedAt) / duration, 1);
+        const eased = progress * progress * (3 - 2 * progress);
+        setModelOpacity(initialOpacity + (targetOpacity - initialOpacity) * eased);
+        if (progress < 1) {
+          modelFadeFrame = requestAnimationFrame(frame);
+          return;
+        }
+        modelFadeFrame = undefined;
+        modelFadeTarget = undefined;
+        if (targetOpacity === 0) {
+          modelDisplayed = false;
+          model.setAttribute("visible", false);
+        }
       };
       modelFadeFrame = requestAnimationFrame(frame);
     }
 
     function updateView() {
       const canShowModel = !failed && arReady && modelLoaded && targetVisible && targetStable && !document.hidden;
-      if (canShowModel) fadeInModel();
-      else hideModel();
+      if (canShowModel) {
+        if (!modelDisplayed || modelOpacityProgress < 1) animateModelOpacity(1, MODEL_FADE_IN_MS);
+      } else if (modelDisplayed || modelOpacityProgress > 0) {
+        animateModelOpacity(0, MODEL_FADE_OUT_MS);
+      } else {
+        hideModel();
+      }
       if (failed || !arReady) return;
       if (document.hidden) return;
       hint.classList.toggle("scanning", !targetVisible);
@@ -363,75 +405,110 @@
       const root = model.getObject3D("mesh");
       if (!root) throw new Error("The model has no mesh");
 
-      // Screen-space bands stay horizontal even on sloped roofs and rotated posters.
-      const viewportSize = new THREE.Vector2();
+      model.object3D.updateMatrixWorld(true);
+      const worldToModel = new THREE.Matrix4().copy(model.object3D.matrixWorld).invert();
+      const modelBounds = new THREE.Box3();
+      root.traverse(node => {
+        if (!node.isMesh || !node.geometry) return;
+        if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
+        const meshToModel = new THREE.Matrix4().multiplyMatrices(worldToModel, node.matrixWorld);
+        modelBounds.union(node.geometry.boundingBox.clone().applyMatrix4(meshToModel));
+      });
+      if (modelBounds.isEmpty()) throw new Error("The model has no measurable geometry");
       const uniforms = {
         uHoloTime: {value: 0},
-        uHoloViewportHeight: {value: 1}
+        uHoloOpacity: {value: HOLOGRAM_OPACITY * modelOpacityProgress},
+        uHoloCyanStrength: {value: HOLOGRAM_CYAN_STRENGTH},
+        uHoloGridScale: {value: GRID_SCALE},
+        uHoloGridOpacity: {value: GRID_OPACITY},
+        uHoloGridLineWidth: {value: GRID_LINE_WIDTH},
+        uHoloEdgeOpacity: {value: EDGE_LINE_OPACITY},
+        uHoloScanSpeed: {value: SCAN_SPEED},
+        uHoloScanWidth: {value: SCAN_WIDTH},
+        uHoloScanIntensity: {value: SCAN_INTENSITY},
+        uHoloMinY: {value: modelBounds.min.y},
+        uHoloHeight: {value: Math.max(modelBounds.max.y - modelBounds.min.y, 0.0001)},
+        uHoloWorldToModel: {value: worldToModel.clone()}
       };
+      hologramUniforms = uniforms;
       const startedAt = performance.now();
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
       const materials = new Map();
       const convert = original => {
         if (materials.has(original)) return materials.get(original);
-        const material = new THREE.MeshStandardMaterial({
-          color: original.color ? original.color.clone() : new THREE.Color("#ffffff"),
-          emissive: "#087f80",
-          emissiveIntensity: 0.3,
-          roughness: 0.5,
-          metalness: 0.1,
-          opacity: 0,
-          transparent: true,
-          depthWrite: true,
-          depthTest: true,
-          side: original.side,
-          // Preserve original texture color and cutout silhouettes before the teal mix.
-          map: original.map || null,
-          normalMap: original.normalMap || null,
-          normalScale: original.normalScale ? original.normalScale.clone() : new THREE.Vector2(1, 1),
-          alphaMap: original.alphaMap || null,
-          alphaTest: original.alphaTest || 0,
-          blending: THREE.NormalBlending
-        });
-        material.onBeforeCompile = shader => {
+        const material = original.clone();
+        material.transparent = true;
+        material.extensions.derivatives = true;
+        material.needsUpdate = true;
+        const originalOnBeforeCompile = material.onBeforeCompile;
+        const originalProgramCacheKey = material.customProgramCacheKey.bind(material)();
+        material.onBeforeCompile = (shader, renderer) => {
+          originalOnBeforeCompile.call(material, shader, renderer);
           Object.assign(shader.uniforms, uniforms);
-          shader.fragmentShader = `
-            uniform float uHoloTime;
-            uniform float uHoloViewportHeight;
-          ` + shader.fragmentShader;
+          shader.vertexShader = shader.vertexShader.replace(
+            "#include <common>",
+            `#include <common>
+             uniform mat4 uHoloWorldToModel;
+             varying vec3 vHoloModelPosition;`
+          );
+          shader.vertexShader = shader.vertexShader.replace(
+            "#include <project_vertex>",
+            `vHoloModelPosition = (uHoloWorldToModel * modelMatrix * vec4(transformed, 1.0)).xyz;
+             #include <project_vertex>`
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <common>",
+            `#include <common>
+             uniform float uHoloTime;
+             uniform float uHoloOpacity;
+             uniform float uHoloCyanStrength;
+             uniform float uHoloGridScale;
+             uniform float uHoloGridOpacity;
+             uniform float uHoloGridLineWidth;
+             uniform float uHoloEdgeOpacity;
+             uniform float uHoloScanSpeed;
+             uniform float uHoloScanWidth;
+             uniform float uHoloScanIntensity;
+             uniform float uHoloMinY;
+             uniform float uHoloHeight;
+             varying vec3 vHoloModelPosition;`
+          );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <map_fragment>",
             `#include <map_fragment>
-             // Keep 55% of the original material + texture color beneath the cyan tint.
-             vec3 memoryColor = diffuseColor.rgb;
-             float memoryLuma = dot(memoryColor, vec3(0.2126, 0.7152, 0.0722));
-             vec3 tealColor = vec3(0.025, 0.42, 0.39) * (0.25 + memoryLuma * 0.9);
-             diffuseColor.rgb = mix(tealColor, memoryColor, 0.55);`
+             vec3 historicColor = diffuseColor.rgb;
+             vec3 cyanAtmosphere = max(historicColor * vec3(0.58, 0.92, 0.86), vec3(0.08, 0.48, 0.44));
+             diffuseColor.rgb = mix(historicColor, cyanAtmosphere, uHoloCyanStrength);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <emissivemap_fragment>",
             `#include <emissivemap_fragment>
-             float height = gl_FragCoord.y / max(uHoloViewportHeight, 1.0);
-             // Gentle bands travel upward across the screen, independent of mesh UVs.
-             float phase = (height - uHoloTime * 0.018) * 24.0;
-             float wave = 0.5 + 0.5 * cos(phase * 6.2831853);
-             float scan = smoothstep(0.50, 0.98, wave);
-             // Fade fine lines at a distance to reduce shimmering on phone screens.
-             scan *= 1.0 - smoothstep(0.2, 0.65, fwidth(phase));
-             float facingEdge = clamp(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
-             float rim = pow(facingEdge, 2.0);
-             float outerRim = pow(facingEdge, 4.5);
-             // Broad soft teal falloff builds into a brighter, pale silhouette.
-             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.18;
-             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 1.4;
-             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 2.4;
-             totalEmissiveRadiance += diffuseColor.rgb * 0.08;
-             diffuseColor.a *= clamp(0.96 + rim * 0.08 + scan * 0.025, 0.0, 1.0);`
+             vec3 gridPosition = vHoloModelPosition * uHoloGridScale;
+             vec3 gridDistance = abs(fract(gridPosition - 0.5) - 0.5);
+             vec3 gridFootprint = max(fwidth(gridPosition), vec3(0.0001));
+             vec3 gridMask = 1.0 - smoothstep(vec3(uHoloGridLineWidth), vec3(uHoloGridLineWidth) + gridFootprint, gridDistance);
+             float gridLine = max(max(gridMask.x, gridMask.y), gridMask.z);
+             float normalVariation = length(fwidth(normalize(normal)));
+             float edgeLine = smoothstep(0.018, 0.14, normalVariation);
+             float modelHeight = clamp((vHoloModelPosition.y - uHoloMinY) / uHoloHeight, 0.0, 1.0);
+             float scanPosition = fract(uHoloTime / max(uHoloScanSpeed, 0.1));
+             float scanDistance = abs(modelHeight - scanPosition);
+             float scanBand = 1.0 - smoothstep(uHoloScanWidth * 0.35, uHoloScanWidth, scanDistance);
+             float scanHalo = exp(-scanDistance / max(uHoloScanWidth * 4.0, 0.001)) * 0.12;
+             float scanLight = scanBand + scanHalo;
+             totalEmissiveRadiance += vec3(0.78, 0.96, 0.93) * gridLine * uHoloGridOpacity;
+             totalEmissiveRadiance += vec3(0.84, 0.97, 0.95) * edgeLine * uHoloEdgeOpacity;
+             totalEmissiveRadiance += vec3(0.78, 0.98, 0.97) * scanLight * uHoloScanIntensity;
+             totalEmissiveRadiance += vec3(0.48, 0.84, 0.82) * gridLine * scanBand * 0.55;`
+          );
+          shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <opaque_fragment>",
+            `diffuseColor.a *= uHoloOpacity;
+             #include <opaque_fragment>`
           );
         };
-        material.customProgramCacheKey = () => "garden-memory-hologram-v6";
+        material.customProgramCacheKey = () => `${originalProgramCacheKey}-archival-hologram-v1`;
         materials.set(original, material);
-        hologramMaterials.add(material);
         return material;
       };
       root.traverse(node => {
@@ -443,8 +520,6 @@
           previousRender.apply(this, args);
           const elapsed = (performance.now() - startedAt) / 1000;
           uniforms.uHoloTime.value = reduceMotion.matches ? 0 : elapsed;
-          args[0].getDrawingBufferSize(viewportSize);
-          uniforms.uHoloViewportHeight.value = viewportSize.y;
         };
       });
     }
@@ -485,7 +560,7 @@
         if (!targetVisible) return;
         targetStable = true;
         updateView();
-      }, TARGET_STABILITY_MS);
+      }, TRACKING_STABLE_DELAY);
       updateView();
     });
     target.addEventListener("targetLost", () => {
