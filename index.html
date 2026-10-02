@@ -173,22 +173,26 @@
   >
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Soft ambient fill preserves detail without flattening shaded surfaces. -->
-    <a-entity light="type: ambient; color: #ffffff; intensity: 0.65"></a-entity>
+    <!-- Low neutral fill keeps the hologram legible during night-time use. -->
+    <a-entity light="type: ambient; color: #d2fff5; intensity: 0.4"></a-entity>
 
     <!-- 历史报纸识别目标 -->
     <a-entity
       id="target"
       mindar-image-target="targetIndex: 0"
     >
-      <!-- Lights follow the newspaper so illumination stays consistent while viewing. -->
+      <!-- Colored lights follow the newspaper for a legible night-time hologram. -->
       <a-entity
-        light="type: directional; color: #ffffff; intensity: 2.4"
+        light="type: directional; color: #b6fff3; intensity: 2.2"
         position="2 4 3"
       ></a-entity>
       <a-entity
-        light="type: directional; color: #ffffff; intensity: 0.55"
+        light="type: directional; color: #45d8cd; intensity: 0.75"
         position="-3 1 -2"
+      ></a-entity>
+      <a-entity
+        light="type: directional; color: #ffd0a0; intensity: 0.35"
+        position="-2 3 2"
       ></a-entity>
 
       <!-- 你的 3D 模型 -->
@@ -211,7 +215,7 @@
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
     // Tune the archival hologram here; grid width is measured in grid cells.
     const HOLOGRAM_OPACITY = 0.9;
-    const HOLOGRAM_CYAN_STRENGTH = 0.48;
+    const HOLOGRAM_CYAN_STRENGTH = 0.72;
     const GRID_SCALE = 4.0;
     const GRID_OPACITY = 0.11;
     const GRID_LINE_WIDTH = 0.018;
@@ -463,7 +467,7 @@
             "#include <map_fragment>",
             `#include <map_fragment>
              vec3 historicColor = diffuseColor.rgb;
-             vec3 cyanAtmosphere = max(historicColor * vec3(0.58, 0.92, 0.86), vec3(0.08, 0.48, 0.44));
+             vec3 cyanAtmosphere = historicColor * vec3(0.45, 0.86, 0.78) + vec3(0.02, 0.10, 0.14);
              diffuseColor.rgb = mix(historicColor, cyanAtmosphere, uHoloCyanStrength);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
@@ -477,7 +481,8 @@
              float edgeLine = smoothstep(0.72, 0.96, grazingAngle);
              totalEmissiveRadiance += vec3(0.78, 0.96, 0.93) * gridLine * uHoloGridOpacity;
              totalEmissiveRadiance += vec3(0.84, 0.97, 0.95) * edgeLine * uHoloEdgeOpacity;
-             totalEmissiveRadiance += vec3(0.08, 0.38, 0.36) * diffuseColor.rgb * 0.12;`
+             float surfaceLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
+             totalEmissiveRadiance += vec3(0.015, 0.36, 0.33) * (0.4 + surfaceLuma * 0.35);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <opaque_fragment>",
