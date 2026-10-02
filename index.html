@@ -47,6 +47,29 @@
       box-sizing: border-box;
       padding-top: max(12px, env(safe-area-inset-top));
     }
+    #hint.scanning:not(.intro) {
+      top: 50%;
+      left: 50%;
+      right: auto;
+      width: min(88vw, 560px);
+      padding: 18px 22px;
+      border-radius: 12px;
+      background: rgba(9, 17, 18, 0.72);
+      text-align: center;
+      transform: translate(-50%, -50%);
+      backdrop-filter: blur(8px);
+    }
+    #hint.scanning:not(.intro) #status {
+      margin: 0;
+      font-size: clamp(24px, 6vw, 38px);
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    #hint.scanning:not(.intro) #detail {
+      margin-top: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
     #hint p { margin: 6px 0; }
     #status, #detail { white-space: pre-line; }
     #detail { font-size: 12px; opacity: 0.95; }
@@ -205,6 +228,7 @@
       model.setAttribute("visible", !failed && arReady && modelReady && targetVisible && !document.hidden);
       if (failed || !arReady) return;
       if (document.hidden) return;
+      hint.classList.toggle("scanning", !targetVisible);
       message(targetVisible
         ? "The garden returns. / 記憶中的花園，正在重現。"
         : seenTarget ? "Bring the newspaper back into view. / 請將歷史報紙重新放入畫面"
