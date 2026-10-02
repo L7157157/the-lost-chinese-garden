@@ -49,7 +49,7 @@
     }
     #hint p { margin: 6px 0; }
     #status, #detail { white-space: pre-line; }
-    #detail { font-size: 12px; opacity: 0.85; }
+    #detail { font-size: 12px; opacity: 0.95; }
     progress { width: min(100%, 360px); height: 8px; }
     button {
       margin-top: 10px; padding: 12px 20px; min-height: 44px;
@@ -142,8 +142,8 @@
   >
     <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-    <!-- Even illumination keeps shaded parts of the model visible. -->
-    <a-entity light="type: ambient; color: #ffffff; intensity: 1.5"></a-entity>
+    <!-- Soft ambient fill preserves detail without flattening shaded surfaces. -->
+    <a-entity light="type: ambient; color: #ffffff; intensity: 0.65"></a-entity>
 
     <!-- 历史报纸识别目标 -->
     <a-entity
@@ -152,11 +152,11 @@
     >
       <!-- Lights follow the newspaper so illumination stays consistent while viewing. -->
       <a-entity
-        light="type: directional; color: #ffffff; intensity: 2"
+        light="type: directional; color: #ffffff; intensity: 2.4"
         position="2 4 3"
       ></a-entity>
       <a-entity
-        light="type: directional; color: #ffffff; intensity: 1"
+        light="type: directional; color: #ffffff; intensity: 0.55"
         position="-3 1 -2"
       ></a-entity>
 
@@ -303,8 +303,7 @@
       const viewportSize = new THREE.Vector2();
       const uniforms = {
         uHoloTime: {value: 0},
-        uHoloViewportHeight: {value: 1},
-        uHoloFlash: {value: 0}
+        uHoloViewportHeight: {value: 1}
       };
       const startedAt = performance.now();
       const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -314,16 +313,18 @@
         const material = new THREE.MeshStandardMaterial({
           color: original.color ? original.color.clone() : new THREE.Color("#ffffff"),
           emissive: "#087f80",
-          emissiveIntensity: 0.65,
+          emissiveIntensity: 0.3,
           roughness: 0.5,
           metalness: 0.1,
-          opacity: 0.8,
+          opacity: 0.9,
           transparent: true,
           depthWrite: true,
           depthTest: true,
           side: original.side,
           // Preserve original texture color and cutout silhouettes before the teal mix.
           map: original.map || null,
+          normalMap: original.normalMap || null,
+          normalScale: original.normalScale ? original.normalScale.clone() : new THREE.Vector2(1, 1),
           alphaMap: original.alphaMap || null,
           alphaTest: original.alphaTest || 0,
           blending: THREE.NormalBlending
@@ -333,16 +334,15 @@
           shader.fragmentShader = `
             uniform float uHoloTime;
             uniform float uHoloViewportHeight;
-            uniform float uHoloFlash;
           ` + shader.fragmentShader;
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <map_fragment>",
             `#include <map_fragment>
-             // Keep 24% of the original material + texture color beneath the cyan tint.
+             // Keep 55% of the original material + texture color beneath the cyan tint.
              vec3 memoryColor = diffuseColor.rgb;
              float memoryLuma = dot(memoryColor, vec3(0.2126, 0.7152, 0.0722));
-             vec3 tealColor = vec3(0.025, 0.42, 0.39) * (0.55 + memoryLuma * 0.65);
-             diffuseColor.rgb = mix(tealColor, memoryColor, 0.24);`
+             vec3 tealColor = vec3(0.025, 0.42, 0.39) * (0.25 + memoryLuma * 0.9);
+             diffuseColor.rgb = mix(tealColor, memoryColor, 0.55);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <emissivemap_fragment>",
@@ -355,22 +355,17 @@
              // Fade fine lines at a distance to reduce shimmering on phone screens.
              scan *= 1.0 - smoothstep(0.2, 0.65, fwidth(phase));
              float facingEdge = clamp(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 0.0, 1.0);
-             float rim = pow(facingEdge, 1.35);
+             float rim = pow(facingEdge, 2.0);
              float outerRim = pow(facingEdge, 4.5);
-             float flicker = 1.0 + 0.018 * sin(uHoloTime * 5.1)
-                                 + 0.012 * sin(uHoloTime * 8.3);
              // Broad soft teal falloff builds into a brighter, pale silhouette.
-             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.32;
-             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 2.35;
-             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 3.20;
-             totalEmissiveRadiance += diffuseColor.rgb * 0.3;
-             totalEmissiveRadiance *= flicker;
-             // One bright cyan-white pulse every three seconds, confined to the model.
-             totalEmissiveRadiance += vec3(0.60, 1.00, 0.94) * uHoloFlash * 3.8;
+             totalEmissiveRadiance += vec3(0.06, 0.80, 0.72) * scan * 0.18;
+             totalEmissiveRadiance += vec3(0.12, 0.90, 0.82) * rim * 1.4;
+             totalEmissiveRadiance += vec3(0.55, 1.00, 0.90) * outerRim * 2.4;
+             totalEmissiveRadiance += diffuseColor.rgb * 0.08;
              diffuseColor.a *= clamp(0.96 + rim * 0.08 + scan * 0.025, 0.0, 1.0);`
           );
         };
-        material.customProgramCacheKey = () => "garden-memory-hologram-v5";
+        material.customProgramCacheKey = () => "garden-memory-hologram-v6";
         materials.set(original, material);
         return material;
       };
@@ -383,10 +378,6 @@
           previousRender.apply(this, args);
           const elapsed = (performance.now() - startedAt) / 1000;
           uniforms.uHoloTime.value = reduceMotion.matches ? 0 : elapsed;
-          const pulseTime = elapsed % 3;
-          // Smooth 0.32-second pulse; reduced-motion mode keeps steady illumination.
-          uniforms.uHoloFlash.value = !reduceMotion.matches && elapsed >= 3 && pulseTime < 0.32
-            ? Math.pow(Math.sin(Math.PI * pulseTime / 0.32), 2) : 0;
           args[0].getDrawingBufferSize(viewportSize);
           uniforms.uHoloViewportHeight.value = viewportSize.y;
         };
