@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <title>The Lost Chinese Garden · AR</title>
+  <title>The Lost Chinese Garden · 消逝的花園 · AR</title>
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
@@ -48,6 +48,7 @@
       padding-top: max(12px, env(safe-area-inset-top));
     }
     #hint p { margin: 6px 0; }
+    #status, #detail { white-space: pre-line; }
     #detail { font-size: 12px; opacity: 0.85; }
     progress { width: min(100%, 360px); height: 8px; }
     button {
@@ -80,15 +81,15 @@
     .intro .intro-only { display: block; }
     .intro .eyebrow { font-size: 11px; letter-spacing: 0.24em; color: #8fc6bc; }
     .intro .archive-title {
-      margin-top: 6vh !important;
+      margin-top: 3vh !important;
       font-family: Georgia, "Songti SC", "Noto Serif CJK SC", serif;
-      font-size: clamp(44px, 12vw, 88px);
+      font-size: clamp(30px, 8vw, 56px);
       line-height: 1.15;
       letter-spacing: -0.04em;
       color: #e9eee0;
     }
-    .intro .archive-note { margin: 24px 0 5vh !important; color: #a4bfb8; line-height: 1.9; font-size: 14px; }
-    .intro #status { font-size: clamp(25px, 7vw, 42px); font-weight: 500; letter-spacing: 0.06em; }
+    .intro .archive-note { margin: 20px 0 3vh !important; color: #a4bfb8; line-height: 1.9; font-size: 14px; }
+    .intro #status { font-size: clamp(20px, 5.5vw, 30px); font-weight: 500; letter-spacing: 0.06em; }
     .intro #detail { margin-top: 12px; line-height: 1.8; font-size: 14px; max-width: 36em; }
     .intro progress { width: 100%; margin-top: 24px; accent-color: #8cf5df; }
     .intro button {
@@ -97,14 +98,18 @@
       background: #b3f5df; color: #082e2a; font-size: 20px; letter-spacing: 0.16em;
       box-shadow: 0 0 36px #6be8cf20;
     }
+    .title-zh { display: block; margin-top: 14px; font-size: 0.68em; letter-spacing: 0.02em; }
+    #start span { display: block; }
+    #start span + span { margin-top: 6px; font-size: 0.85em; }
+    .intro > * { flex-shrink: 0; }
     button:focus-visible { outline: 3px solid #ffffff; outline-offset: 5px; }
-    .intro .archive-footer { margin-top: 5vh !important; font-size: 10px; letter-spacing: 0.17em; color: #8fc6bc; }
+    .intro .archive-footer { margin-top: 3vh !important; font-size: 10px; letter-spacing: 0.17em; color: #8fc6bc; }
     @media (min-width: 700px) {
       #hint.intro { padding-left: max(7vw, calc((100vw - 640px) / 2)); padding-right: max(7vw, calc((100vw - 640px) / 2)); }
     }
     @media (max-height: 650px) {
       #hint.intro { justify-content: flex-start; }
-      .intro .archive-title { margin-top: 20px !important; font-size: 40px; }
+      .intro .archive-title { margin-top: 20px !important; font-size: 30px; }
       .intro .archive-note { margin: 14px 0 20px !important; }
       .intro .archive-footer { margin-top: 24px !important; }
     }
@@ -115,15 +120,15 @@
 <body>
   <!-- 提示 UI -->
   <div id="hint" class="intro">
-    <p class="intro-only eyebrow">THE LOST CHINESE GARDEN / 记忆档案</p>
-    <p class="intro-only archive-title">旧报之间，<br>花园重现。</p>
-    <p class="intro-only archive-note">一张历史报纸，一座消逝的花园。<br>让镜头穿过纸上的文字，重访被时间收藏的记忆。</p>
-    <p id="status" role="status" aria-live="polite">正在唤醒记忆…</p>
-    <p id="detail">请保持页面开启，稍后便可进入。</p>
-    <progress id="progress" aria-label="记忆加载进度" max="100"></progress>
-    <button id="start" type="button" hidden>开始回忆</button>
-    <button id="retry" type="button" hidden>重新尝试</button>
-    <p class="intro-only archive-footer">历史报纸 · 增强现实记忆体验</p>
+    <p class="intro-only eyebrow">THE LOST CHINESE GARDEN / 記憶檔案</p>
+    <p class="intro-only archive-title"><span lang="en">Between the pages,<br>a garden returns.</span><span class="title-zh">舊報之間，花園重現。</span></p>
+    <p class="intro-only archive-note"><span lang="en">This garden was once part of China Court (文華邨), 1976–1986.</span><br>這座花園曾是 China Court 文華邨（1976–1986）的一部分。</p>
+    <p id="status" role="status" aria-live="polite">Awakening memories… / 正在喚醒記憶…</p>
+    <p id="detail">Keep this page open. / 請保持頁面開啟。</p>
+    <progress id="progress" aria-label="Memory loading progress / 記憶載入進度" max="100"></progress>
+    <button id="start" type="button" hidden><span lang="en">Begin remembering</span><span>開始回憶</span></button>
+    <button id="retry" type="button" hidden>Try again / 重新嘗試</button>
+    <p class="intro-only archive-footer">HISTORIC NEWSPAPER · AR MEMORIES / 歷史報紙 · 擴增實境記憶</p>
   </div>
 
   <!-- AR 场景 -->
@@ -193,8 +198,8 @@
     const objectURLs = [];
 
     function message(text, subtext = "") {
-      status.textContent = text;
-      detail.textContent = subtext;
+      status.textContent = text.replaceAll(" / ", "\n");
+      detail.textContent = subtext.replaceAll(" / ", "\n");
     }
 
     function updateView() {
@@ -202,10 +207,10 @@
       if (failed || !arReady) return;
       if (document.hidden) return;
       message(targetVisible
-        ? "记忆中的花园，正在重现。"
-        : seenTarget ? "请将历史报纸重新放入画面，继续回忆。"
-        : "请将镜头对准历史报纸。",
-        targetVisible ? "缓缓移动镜头，探索记忆中的花园。" : "让整张历史报纸进入画面，并保持手机平稳。");
+        ? "The garden returns. / 記憶中的花園，正在重現。"
+        : seenTarget ? "Bring the newspaper back into view. / 請將歷史報紙重新放入畫面，繼續回憶。"
+        : "Point your camera at the historic newspaper. / 請將鏡頭對準歷史報紙。",
+        targetVisible ? "Move slowly to explore the garden. / 緩緩移動鏡頭，探索記憶中的花園。" : "Keep the whole newspaper in view and hold steady. / 讓整張歷史報紙進入畫面，並保持手機平穩。");
     }
 
     function fail(text) {
@@ -215,7 +220,7 @@
       progress.hidden = true;
       start.hidden = true;
       retry.hidden = false;
-      message(text, "请检查网络连接和相机权限，然后重新尝试。");
+      message(text, "Check your connection and camera permission, then try again. / 請檢查網絡連線和相機權限，然後重新嘗試。");
       updateView();
       // Also release the camera if startup stalled before arReady.
       const system = scene.systems?.["mindar-image-system"];
@@ -225,12 +230,12 @@
 
     async function download(name, label) {
       const url = assetURL(name);
-      message(`正在准备${label}…`);
+      message(`Preparing ${label[0]}… / 正在準備${label[1]}…`);
       progress.removeAttribute("value");
       try {
         const hit = await cache?.match(url);
         if (hit) {
-          message(`正在读取已保存的${label}…`);
+          message(`Loading saved ${label[0]}… / 正在讀取已儲存的${label[1]}…`);
           return await hit.blob();
         }
       } catch (error) { console.warn("Cache read unavailable", error); }
@@ -263,10 +268,10 @@
             if (total > 0 && received <= total) {
               const percent = Math.floor(received / total * 100);
               progress.value = percent;
-              message(`正在加载${label} · ${percent}%`, `已加载 ${mb} MB`);
+              message(`Loading ${label[0]} · ${percent}% / 正在載入${label[1]} · ${percent}%`, `${mb} MB received / 已載入 ${mb} MB`);
             } else {
               progress.removeAttribute("value");
-              message(`正在加载${label}…`, `已加载 ${mb} MB`);
+              message(`Loading ${label[0]}… / 正在載入${label[1]}…`, `${mb} MB received / 已載入 ${mb} MB`);
             }
           }
           blob = new Blob(chunks, {type: response.headers.get("content-type") || "application/octet-stream"});
@@ -422,7 +427,7 @@
       targetVisible = false;
       updateView();
     });
-    scene.addEventListener("arError", () => fail("无法启动相机，请允许相机访问。"));
+    scene.addEventListener("arError", () => fail("Unable to start the camera. Please allow access. / 無法啟動相機，請允許相機存取。"));
     let posterBlob;
     scene.addEventListener("arReady", () => {
       if (failed) {
@@ -444,10 +449,10 @@
       start.hidden = true;
       progress.hidden = false;
       progress.removeAttribute("value");
-      message("正在开启回忆…", "请在提示出现时允许相机访问。");
-      arTimer = setTimeout(() => fail("相机启动超时，请重新尝试。"), 60000);
+      message("Opening memories… / 正在開啟回憶…", "Allow camera access when prompted. / 請在提示出現時允許相機存取。");
+      arTimer = setTimeout(() => fail("Camera startup timed out. Please try again. / 相機啟動逾時，請重新嘗試。"), 60000);
       try { scene.systems["mindar-image-system"].start(); }
-      catch (error) { console.error(error); fail("暂时无法在此设备上开启回忆。"); }
+      catch (error) { console.error(error); fail("Unable to start this experience on your device. / 暫時無法在此裝置上開啟回憶。"); }
     });
     retry.addEventListener("click", async () => {
       retry.disabled = true;
@@ -476,19 +481,19 @@
 
     async function prepare() {
       if (!window.AFRAME || !AFRAME.components["mindar-image"]) {
-        fail("记忆体验加载失败，请检查网络连接。");
+        fail("Unable to load the experience. Check your connection. / 記憶體驗載入失敗，請檢查網絡連線。");
         return;
       }
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        fail("请使用 Safari 或 Chrome，通过 HTTPS 链接打开体验。");
+        fail("Open the HTTPS link in Safari or Chrome. / 請使用 Safari 或 Chrome，透過 HTTPS 連結開啟體驗。");
         return;
       }
       try {
         try { cache = await caches.open(CACHE_NAME); }
         catch (error) { console.warn("Persistent cache unavailable", error); }
         // Download immediately; do not wait for poster detection or camera permission.
-        const modelBlob = await download("model-optimized.glb", "花园记忆");
-        message("正在还原花园…", "下载已完成，正在整理记忆中的细节。");
+        const modelBlob = await download("model-optimized.glb", ["garden memories", "花園記憶"]);
+        message("Restoring the garden… / 正在還原花園…", "Download complete. Preparing the details. / 下載已完成，正在整理記憶中的細節。");
         progress.removeAttribute("value");
         if (!scene.hasLoaded) await new Promise((resolve, reject) => {
           const loaded = () => { clearTimeout(timer); resolve(); };
@@ -500,15 +505,15 @@
         });
         await loadModel(modelBlob);
         void save("model-optimized.glb", modelBlob);
-        posterBlob = await download("poster.mind", "历史报纸识别数据");
+        posterBlob = await download("poster.mind", ["newspaper recognition data", "歷史報紙辨識資料"]);
         // The system copies component settings during init; set its source before start().
         scene.systems["mindar-image-system"].imageTargetSrc = blobURL(posterBlob);
         progress.hidden = true;
         start.hidden = false;
-        message("记忆已经加载", "点击「开始回忆」，允许相机访问，再将镜头对准历史报纸。");
+        message("Memories loaded / 記憶已經載入", "Tap “Begin remembering”, allow camera access, then scan the historic newspaper. / 點擊「開始回憶」，允許相機存取，再將鏡頭對準歷史報紙。");
       } catch (error) {
         console.error(error);
-        fail("记忆加载失败，请重新尝试。");
+        fail("Unable to load memories. Please try again. / 記憶載入失敗，請重新嘗試。");
       }
     }
     void prepare();
