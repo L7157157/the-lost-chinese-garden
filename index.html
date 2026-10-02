@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <title>The Lost Chinese Garden · 消逝的花園 · AR</title>
+  <title>2026 Nuit Blanche / Night Market for a Future Garden</title>
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
@@ -120,15 +120,13 @@
 <body>
   <!-- 提示 UI -->
   <div id="hint" class="intro">
-    <p class="intro-only eyebrow">THE LOST CHINESE GARDEN / 記憶檔案</p>
     <p class="intro-only archive-title"><span lang="en">Between the pages,<br>a garden returns.</span><span class="title-zh">舊報之間，花園重現。</span></p>
-    <p class="intro-only archive-note"><span lang="en">This garden was once part of China Court (文華邨), 1976–1986.</span><br>這座花園曾是 China Court 文華邨（1976–1986）的一部分。</p>
+    <p class="intro-only archive-note"><span lang="en">This garden was once part of China Court (文華邨), 1976–1986.</span></p>
     <p id="status" role="status" aria-live="polite">Awakening memories… / 正在喚醒記憶…</p>
     <p id="detail">Keep this page open. / 請保持頁面開啟。</p>
     <progress id="progress" aria-label="Memory loading progress / 記憶載入進度" max="100"></progress>
     <button id="start" type="button" hidden><span lang="en">Begin remembering</span><span>開始回憶</span></button>
     <button id="retry" type="button" hidden>Try again / 重新嘗試</button>
-    <p class="intro-only archive-footer">HISTORIC NEWSPAPER · AR MEMORIES / 歷史報紙 · 擴增實境記憶</p>
   </div>
 
   <!-- AR 场景 -->
@@ -208,7 +206,7 @@
       if (document.hidden) return;
       message(targetVisible
         ? "The garden returns. / 記憶中的花園，正在重現。"
-        : seenTarget ? "Bring the newspaper back into view. / 請將歷史報紙重新放入畫面，繼續回憶。"
+        : seenTarget ? "Bring the newspaper back into view. / 請將歷史報紙重新放入畫面"
         : "Point your camera at the historic newspaper. / 請將鏡頭對準歷史報紙。",
         targetVisible ? "Move slowly to explore the garden. / 緩緩移動鏡頭，探索記憶中的花園。" : "Keep the whole newspaper in view and hold steady. / 讓整張歷史報紙進入畫面，並保持手機平穩。");
     }
