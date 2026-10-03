@@ -218,12 +218,7 @@
     const ASSET_VERSION = "festival-7-memory";
     const CACHE_NAME = "lost-garden-assets";
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
-    // Tune the archival hologram here; grid width is measured in grid cells.
-    const HOLOGRAM_OPACITY = 0.9;
-    const GRID_SCALE = 5.0;
-    const GRID_OPACITY = 0.2;
-    const GRID_LINE_WIDTH = 0.016;
-    const EDGE_LINE_OPACITY = 0.4;
+    const HOLOGRAM_OPACITY = 1.0;
     const TRACKING_STABLE_DELAY = 700;
     const MODEL_FADE_IN_MS = 380;
     const MODEL_FADE_OUT_MS = 150;
@@ -413,29 +408,11 @@
     }
 
     function applyHologram() {
-      const THREE = AFRAME.THREE;
       const root = model.getObject3D("mesh");
       if (!root) throw new Error("The model has no mesh");
 
-      model.object3D.updateMatrixWorld(true);
-      const worldToModel = new THREE.Matrix4().copy(model.object3D.matrixWorld).invert();
-      const modelBounds = new THREE.Box3();
-      root.traverse(node => {
-        if (!node.isMesh || !node.geometry) return;
-        if (!node.geometry.boundingBox) node.geometry.computeBoundingBox();
-        const meshToModel = new THREE.Matrix4().multiplyMatrices(worldToModel, node.matrixWorld);
-        modelBounds.union(node.geometry.boundingBox.clone().applyMatrix4(meshToModel));
-      });
-      if (modelBounds.isEmpty()) throw new Error("The model has no measurable geometry");
       const uniforms = {
-        uHoloOpacity: {value: HOLOGRAM_OPACITY * modelOpacityProgress},
-        uHoloGridScale: {value: GRID_SCALE},
-        uHoloGridOpacity: {value: GRID_OPACITY},
-        uHoloGridLineWidth: {value: GRID_LINE_WIDTH},
-        uHoloEdgeOpacity: {value: EDGE_LINE_OPACITY},
-        uHoloMinY: {value: modelBounds.min.y},
-        uHoloHeight: {value: Math.max(modelBounds.max.y - modelBounds.min.y, 0.0001)},
-        uHoloWorldToModel: {value: worldToModel.clone()}
+        uHoloOpacity: {value: HOLOGRAM_OPACITY * modelOpacityProgress}
       };
       hologramUniforms = uniforms;
       const materials = new Map();
@@ -449,46 +426,10 @@
         material.onBeforeCompile = (shader, renderer) => {
           originalOnBeforeCompile.call(material, shader, renderer);
           Object.assign(shader.uniforms, uniforms);
-          shader.vertexShader = shader.vertexShader.replace(
-            "#include <common>",
-            `#include <common>
-             uniform mat4 uHoloWorldToModel;
-             varying vec3 vHoloModelPosition;`
-          );
-          shader.vertexShader = shader.vertexShader.replace(
-            "#include <project_vertex>",
-            `vHoloModelPosition = (uHoloWorldToModel * modelMatrix * vec4(transformed, 1.0)).xyz;
-             #include <project_vertex>`
-          );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <common>",
             `#include <common>
-             uniform float uHoloOpacity;
-             uniform float uHoloGridScale;
-             uniform float uHoloGridOpacity;
-             uniform float uHoloGridLineWidth;
-             uniform float uHoloEdgeOpacity;
-             uniform float uHoloMinY;
-             uniform float uHoloHeight;
-             varying vec3 vHoloModelPosition;`
-          );
-          shader.fragmentShader = shader.fragmentShader.replace(
-            "#include <map_fragment>",
-            `#include <map_fragment>
-             float scanline = step(0.22, fract(gl_FragCoord.y * 0.14));
-             diffuseColor.rgb *= mix(0.72, 1.0, scanline);`
-          );
-          shader.fragmentShader = shader.fragmentShader.replace(
-            "#include <emissivemap_fragment>",
-            `#include <emissivemap_fragment>
-             vec3 gridPosition = vHoloModelPosition * uHoloGridScale;
-             vec3 gridDistance = abs(fract(gridPosition - 0.5) - 0.5);
-             vec3 gridMask = 1.0 - smoothstep(vec3(uHoloGridLineWidth), vec3(uHoloGridLineWidth * 1.8), gridDistance);
-             float gridLine = max(max(gridMask.x, gridMask.y), gridMask.z);
-             float grazingAngle = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
-             float edgeLine = smoothstep(0.72, 0.96, grazingAngle);
-             totalEmissiveRadiance += vec3(1.0) * gridLine * uHoloGridOpacity;
-             totalEmissiveRadiance += vec3(1.0) * edgeLine * uHoloEdgeOpacity;`
+             uniform float uHoloOpacity;`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <opaque_fragment>",
@@ -496,7 +437,7 @@
              #include <opaque_fragment>`
           );
         };
-        material.customProgramCacheKey = () => `${originalProgramCacheKey}-archival-hologram-v3`;
+        material.customProgramCacheKey = () => `${originalProgramCacheKey}-archival-hologram-v4`;
         materials.set(original, material);
         return material;
       };
