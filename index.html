@@ -237,11 +237,10 @@
     const assetURL = name => new URL(`${name}?v=${ASSET_VERSION}`, location.href).href;
     // Tune the archival hologram here; grid width is measured in grid cells.
     const HOLOGRAM_OPACITY = 0.9;
-    const HOLOGRAM_CYAN_STRENGTH = 0.82;
-    const GRID_SCALE = 4.0;
-    const GRID_OPACITY = 0.11;
-    const GRID_LINE_WIDTH = 0.018;
-    const EDGE_LINE_OPACITY = 0.16;
+    const GRID_SCALE = 5.0;
+    const GRID_OPACITY = 0.2;
+    const GRID_LINE_WIDTH = 0.016;
+    const EDGE_LINE_OPACITY = 0.4;
     const TRACKING_STABLE_DELAY = 700;
     const MODEL_FADE_IN_MS = 380;
     const MODEL_FADE_OUT_MS = 150;
@@ -447,7 +446,6 @@
       if (modelBounds.isEmpty()) throw new Error("The model has no measurable geometry");
       const uniforms = {
         uHoloOpacity: {value: HOLOGRAM_OPACITY * modelOpacityProgress},
-        uHoloCyanStrength: {value: HOLOGRAM_CYAN_STRENGTH},
         uHoloGridScale: {value: GRID_SCALE},
         uHoloGridOpacity: {value: GRID_OPACITY},
         uHoloGridLineWidth: {value: GRID_LINE_WIDTH},
@@ -483,7 +481,6 @@
             "#include <common>",
             `#include <common>
              uniform float uHoloOpacity;
-             uniform float uHoloCyanStrength;
              uniform float uHoloGridScale;
              uniform float uHoloGridOpacity;
              uniform float uHoloGridLineWidth;
@@ -495,10 +492,8 @@
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <map_fragment>",
             `#include <map_fragment>
-             vec3 historicColor = diffuseColor.rgb;
-             vec3 cyanAtmosphere = historicColor * vec3(0.34, 0.78, 1.18) + vec3(0.015, 0.045, 0.16);
-             cyanAtmosphere = clamp((cyanAtmosphere - 0.42) * 1.3 + 0.42, 0.0, 1.0);
-             diffuseColor.rgb = mix(historicColor, cyanAtmosphere, uHoloCyanStrength);`
+             float scanline = step(0.22, fract(gl_FragCoord.y * 0.14));
+             diffuseColor.rgb *= mix(0.72, 1.0, scanline);`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <emissivemap_fragment>",
@@ -509,10 +504,8 @@
              float gridLine = max(max(gridMask.x, gridMask.y), gridMask.z);
              float grazingAngle = 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)));
              float edgeLine = smoothstep(0.72, 0.96, grazingAngle);
-             totalEmissiveRadiance += vec3(0.78, 0.96, 0.93) * gridLine * uHoloGridOpacity;
-             totalEmissiveRadiance += vec3(0.84, 0.97, 0.95) * edgeLine * uHoloEdgeOpacity;
-             float surfaceLuma = dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-             totalEmissiveRadiance += vec3(0.015, 0.36, 0.33) * (0.4 + surfaceLuma * 0.35);`
+             totalEmissiveRadiance += vec3(0.88, 0.94, 1.0) * gridLine * uHoloGridOpacity;
+             totalEmissiveRadiance += vec3(1.0) * edgeLine * uHoloEdgeOpacity;`
           );
           shader.fragmentShader = shader.fragmentShader.replace(
             "#include <opaque_fragment>",
@@ -520,7 +513,7 @@
              #include <opaque_fragment>`
           );
         };
-        material.customProgramCacheKey = () => `${originalProgramCacheKey}-archival-hologram-v1`;
+        material.customProgramCacheKey = () => `${originalProgramCacheKey}-archival-hologram-v3`;
         materials.set(original, material);
         return material;
       };
